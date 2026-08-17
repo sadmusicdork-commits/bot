@@ -11,7 +11,6 @@ def home():
     return "Bot is online!"
 
 def run_web():
-    # Render routes traffic through port 10000 by default
     app.run(host='0.0.0.0', port=10000)
 
 def keep_alive():
@@ -50,7 +49,7 @@ EMOJI_TO_ROLE = {
 async def on_ready():
     print(f"Logged in as {bot.user.name}! Your bot is online and ready.")
 
-# 4. Command to send the exact reaction roles embed message
+# 4. Command to send the clean reaction roles embed message
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_roles(ctx):
@@ -58,13 +57,12 @@ async def setup_roles(ctx):
         title="Role Selection",
         description="Pick your roles to personalize your experience within the server.",
         color=discord.Color.dark_theme()
-
     )
-    embed.add_field(name="Age", value=f"{CUSTOM_EMOJI_18_PLUS} **18+**\n{CUSTOM_EMOJI_18_MINUS} **18-**", inline=False)
-    embed.add_field(name="Identity", value=f"{CUSTOM_EMOJI_MALE} **Male**\n{CUSTOM_EMOJI_FEMALE} **Female**", inline=False)
+    embed.add_field(name="Age", value="• **18+**\n• **18-**", inline=False)
+    embed.add_field(name="Gender", value="• **Male**\n• **Female**", inline=False)
     embed.add_field(
         name="Information", 
-        value="• Choose **one** age role.\n• Identity roles are optional.\n• Roles can be changed at any time.", 
+        value="• Choose **one** age role.\n• Gender roles are optional.\n• Roles can be changed at any time.", 
         inline=False
     )
     embed.set_footer(text="꒰১ ໒꒱ • Role Selection")
