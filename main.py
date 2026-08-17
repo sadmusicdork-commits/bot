@@ -57,7 +57,8 @@ async def setup_roles(ctx):
     embed = discord.Embed(
         title="Role Selection",
         description="Pick your roles to personalize your experience within the server.",
-        color=discord.Color.black()
+        color=discord.Color.dark_theme()
+
     )
     embed.add_field(name="Age", value=f"{CUSTOM_EMOJI_18_PLUS} **18+**\n{CUSTOM_EMOJI_18_MINUS} **18-**", inline=False)
     embed.add_field(name="Identity", value=f"{CUSTOM_EMOJI_MALE} **Male**\n{CUSTOM_EMOJI_FEMALE} **Female**", inline=False)
