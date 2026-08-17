@@ -1,4 +1,4 @@
-import os
+can u just add the import rules and rules.add_rules_command (bot) code into this so i can copy and paste bc im confused import os
 import discord
 from discord.ext import commands
 from threading import Thread
