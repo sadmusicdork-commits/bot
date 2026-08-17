@@ -1,15 +1,17 @@
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from threading import Thread
 from flask import Flask
-import rules  # Links your main file to your rules file
+import rules
+import urllib.request
+import time
 
-# --- RENDER FREE TIER FIX: Background Web Server Loop ---
+# --- RENDER AWAKE LOOP FIX ---
 app = Flask('')
 @app.route('/')
 def home():
-    return "Bot is online!"
+    return "Bot is online 24/7!"
 
 def run_web():
     app.run(host='0.0.0.0', port=10000)
@@ -23,7 +25,6 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 
-# We will use '!' as the prefix to trigger your setup command
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # 2. YOUR DISCORD SERVER ROLE IDS
@@ -38,7 +39,6 @@ CUSTOM_EMOJI_18_MINUS = "<:minor:1538799431594287104>"
 CUSTOM_EMOJI_MALE = "♂️"
 CUSTOM_EMOJI_FEMALE = "♀️"
 
-# This maps the emojis underneath the message to the corresponding roles
 EMOJI_TO_ROLE = {
     CUSTOM_EMOJI_18_PLUS: ROLE_18_PLUS,
     CUSTOM_EMOJI_18_MINUS: ROLE_18_MINUS,
@@ -46,9 +46,21 @@ EMOJI_TO_ROLE = {
     CUSTOM_EMOJI_FEMALE: ROLE_FEMALE
 }
 
+# Heartbeat loop that pings itself every 5 minutes to stay awake
+@tasks.loop(minutes=5)
+async def self_ping():
+    try:
+        # Pings the local server port to keep Render awake
+        urllib.request.urlopen("http://127.0.0", timeout=10)
+        print("Heartbeat ping sent successfully! Bot staying awake.")
+    except Exception as e:
+        print(f"Ping notice: {e}")
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}! Your bot is online and ready.")
+    if not self_ping.is_running():
+        self_ping.start()
 
 # 4. Command to send the clean reaction roles embed message
 @bot.command()
@@ -68,10 +80,7 @@ async def setup_roles(ctx):
     )
     embed.set_footer(text="꒰১ ໒꒱ • Role Selection")
 
-    # Send the message
     msg = await ctx.send(embed=embed)
-    
-    # Automatically add the reaction numbers and symbols underneath it
     for emoji in EMOJI_TO_ROLE.keys():
         await msg.add_reaction(emoji)
 
@@ -79,9 +88,10 @@ async def setup_roles(ctx):
 @bot.event
 async def on_raw_reaction_add(payload):
     if payload.user_id == bot.user.id:
-        return  # Ignore the bot's own reactions
+        return
 
     emoji_str = str(payload.emoji)
+    print(f"Reaction added: {emoji_str} by user ID {payload.user_id}")  # Debug log
     
     if emoji_str in EMOJI_TO_ROLE:
         guild = bot.get_guild(payload.guild_id)
@@ -89,7 +99,6 @@ async def on_raw_reaction_add(payload):
         role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
         
         if role and member:
-            # Enforce the rule: Remove the other age role if they select a new one
             if emoji_str == CUSTOM_EMOJI_18_PLUS:
                 opposite = guild.get_role(ROLE_18_MINUS)
                 if opposite in member.roles:
@@ -99,13 +108,14 @@ async def on_raw_reaction_add(payload):
                 if opposite in member.roles:
                     await member.remove_roles(opposite)
 
-            # Add the chosen role
             await member.add_roles(role)
 
 # 6. Code that removes the role if a member unchecks the reaction
 @bot.event
 async def on_raw_reaction_remove(payload):
     emoji_str = str(payload.emoji)
+    print(f"Reaction removed: {emoji_str} by user ID {payload.user_id}")  # Debug log
+    
     if emoji_str in EMOJI_TO_ROLE:
         guild = bot.get_guild(payload.guild_id)
         member = guild.get_member(payload.user_id)
@@ -114,11 +124,6 @@ async def on_raw_reaction_remove(payload):
         if role and member:
             await member.remove_roles(role)
 
-# Start the web handler loop before launching the bot connection
 keep_alive()
-
-# Loads the rules command from your separate rules.py file
 rules.add_rules_command(bot)
-
-# This line securely reads your token from Render's Environment Variables
 bot.run(os.environ.get("DISCORD_TOKEN"))
