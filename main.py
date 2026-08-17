@@ -99,4 +99,4 @@ async def on_raw_reaction_remove(payload):
             await member.remove_roles(role)
 
 # This line securely reads your token from Render's Environment Variables
-bot.run(os.environ.get(MTUzODQyNzY2MjgwNzA3NjkzNA.GxMbiq.doWJXZ0DtUas7YPto2y-3s3YDjGgezcIddfQP4))
+bot.run(os.environ.get(bot.run(os.environ.get("DISCORD_TOKEN"))
