@@ -59,7 +59,7 @@ async def setup_roles(ctx):
         color=discord.Color.dark_theme()
     )
     embed.add_field(name="Age", value="• **18+**\n• **18-**", inline=False)
-    embed.add_field(name="Gender", value="• **Male**\n• **Female**", inline=False)
+    embed.add_field(name="Gender", value="♂️ **Male**\n♀️ **Female**", inline=False)
     embed.add_field(
         name="Information", 
         value="• Choose **one** age role.\n• Gender roles are optional.\n• Roles can be changed at any time.", 
