@@ -1,7 +1,9 @@
+import os
 import discord
 from discord.ext import commands
 from threading import Thread
 from flask import Flask
+import rules  # Links your main file to your rules file
 
 # --- RENDER FREE TIER FIX: Background Web Server Loop ---
 app = Flask('')
@@ -114,6 +116,9 @@ async def on_raw_reaction_remove(payload):
 
 # Start the web handler loop before launching the bot connection
 keep_alive()
+
+# Loads the rules command from your separate rules.py file
+rules.add_rules_command(bot)
 
 # This line securely reads your token from Render's Environment Variables
 bot.run(os.environ.get("DISCORD_TOKEN"))
