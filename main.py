@@ -1,6 +1,22 @@
 import os
 import discord
 from discord.ext import commands
+from threading import Thread
+from flask import Flask
+
+# --- RENDER FREE TIER FIX: Background Web Server Loop ---
+app = Flask('')
+@app.route('/')
+def home():
+    return "Bot is online!"
+
+def run_web():
+    # Render routes traffic through port 10000 by default
+    app.run(host='0.0.0.0', port=10000)
+
+def keep_alive():
+    t = Thread(target=run_web)
+    t.start()
 
 # 1. Background settings to let the bot read messages and members
 intents = discord.Intents.default()
@@ -98,5 +114,8 @@ async def on_raw_reaction_remove(payload):
         if role and member:
             await member.remove_roles(role)
 
+# Start the web handler loop before launching the bot connection
+keep_alive()
+
 # This line securely reads your token from Render's Environment Variables
-bot.run(os.environ.get(bot.run(os.environ.get("DISCORD_TOKEN"))
+bot.run(os.environ.get("DISCORD_TOKEN"))
