@@ -5,7 +5,6 @@ from threading import Thread
 from flask import Flask
 import rules
 import urllib.request
-import time
 
 # --- RENDER AWAKE LOOP FIX ---
 app = Flask('')
@@ -50,7 +49,6 @@ EMOJI_TO_ROLE = {
 @tasks.loop(minutes=5)
 async def self_ping():
     try:
-        # Pings the local server port to keep Render awake
         urllib.request.urlopen("http://127.0.0", timeout=10)
         print("Heartbeat ping sent successfully! Bot staying awake.")
     except Exception as e:
@@ -84,14 +82,35 @@ async def setup_roles(ctx):
     for emoji in EMOJI_TO_ROLE.keys():
         await msg.add_reaction(emoji)
 
-# 5. Code that gives the role when a member clicks the reaction
+# 5. NEW AUTOMATIC CHAT RESPONDER
+# This scans normal messages and replies instantly if someone says "pic perms"
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return  # Stop the bot from responding to itself or other bots
+
+    # Convert chat text to lowercase so "Pic Perms" or "PIC PERMS" both trigger it
+    if "pic perms" in message.content.lower():
+        embed = discord.Embed(
+            title="Picture Permissions",
+            description="rep **/admire** in status or **boost** for pic perms",
+            color=discord.Color.dark_theme()
+        )
+        embed.set_footer(text="꒰১ ໒꒱ • Media Access")
+        
+        # Reply directly to the person who asked for pic perms
+        await message.reply(embed=embed)
+
+    # Crucial line to ensure manual commands like !setup_roles and !setup_rules still work!
+    await bot.process_commands(message)
+
+# 6. Code that gives the role when a member clicks the reaction
 @bot.event
 async def on_raw_reaction_add(payload):
     if payload.user_id == bot.user.id:
         return
 
     emoji_str = str(payload.emoji)
-    print(f"Reaction added: {emoji_str} by user ID {payload.user_id}")  # Debug log
     
     if emoji_str in EMOJI_TO_ROLE:
         guild = bot.get_guild(payload.guild_id)
@@ -110,11 +129,10 @@ async def on_raw_reaction_add(payload):
 
             await member.add_roles(role)
 
-# 6. Code that removes the role if a member unchecks the reaction
+# 7. Code that removes the role if a member unchecks the reaction
 @bot.event
 async def on_raw_reaction_remove(payload):
     emoji_str = str(payload.emoji)
-    print(f"Reaction removed: {emoji_str} by user ID {payload.user_id}")  # Debug log
     
     if emoji_str in EMOJI_TO_ROLE:
         guild = bot.get_guild(payload.guild_id)
