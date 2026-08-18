@@ -105,8 +105,7 @@ async def on_message(message):
         await message.reply(embed=embed)
 
     await bot.process_commands(message)
-
-# 6. AUTOMATIC STAFF LOG SYSTEM (DYNAMIC PERMISSION LABELS INTEGRATED)
+# 6. AUTOMATIC STAFF LOG SYSTEM (UNIVERSAL BOT FILTER INSTALLED)
 @bot.event
 async def on_audit_log_entry_create(entry):
     channel = bot.get_channel(LOG_CHANNEL_ID)
@@ -115,7 +114,12 @@ async def on_audit_log_entry_create(entry):
 
     await asyncio.sleep(0.5)
 
-    if entry.user.id == bot.user.id or entry.user.id == SERVER_OWNER_ID:
+    # 🛑 UNIVERSAL BOT FILTER: If the user who did the action is ANY bot, ignore it entirely!
+    if entry.user.bot:
+        return
+
+    # ABSOLUTE FILTER: Skip logging if the person doing the action matches your owner ID
+    if entry.user.id == SERVER_OWNER_ID:
         return
 
     moderator = entry.user
@@ -175,11 +179,10 @@ async def on_audit_log_entry_create(entry):
                 embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
 
-    # CHANNEL PERMISSION OVERWRITE LOGS (DYNAMIC: Added vs Removed vs Changed Checks)
+    # CHANNEL PERMISSION OVERWRITE LOGS
     elif entry.action in [discord.AuditLogAction.channel_overwrite_create, discord.AuditLogAction.channel_overwrite_update, discord.AuditLogAction.channel_overwrite_delete]:
         target_channel = entry.target
         
-        # Decide exact operational layout sentence label dynamically
         if entry.action == discord.AuditLogAction.channel_overwrite_create:
             label_text = "**Permission added:** New role/user override locks activated."
             card_title = "⚙️ Staff Log: Channel Permission Added"
@@ -189,7 +192,7 @@ async def on_audit_log_entry_create(entry):
             card_title = "⚙️ Staff Log: Channel Permission Removed"
             card_color = discord.Color.red()
         else:
-            label_text = "**Permission changed:** View, text chat, or media toggle flags adjusted."
+            label_text = "**Permission changed:** View channel, text message, or attachment toggle flags updated."
             card_title = "⚙️ Staff Log: Channel Permission Changed"
             card_color = discord.Color.orange()
 
