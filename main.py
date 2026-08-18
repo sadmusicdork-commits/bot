@@ -105,7 +105,6 @@ async def on_message(message):
         await message.reply(embed=embed)
 
     await bot.process_commands(message)
-
 # 6. CONNECTED PROFILE ALT MATCH SCANNER (EXACT REQUESTED FIELDS)
 @bot.event
 async def on_member_join(member):
@@ -218,7 +217,7 @@ async def on_audit_log_entry_create(entry):
                 embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
 
-    # CHANNEL PERMISSION OVERWRITE LOGS (DYNAMIC SETTING PERMISSIONS OPERATIONAL LABELS)
+    # CHANNEL PERMISSION OVERWRITE LOGS
     elif entry.action in [discord.AuditLogAction.channel_overwrite_create, discord.AuditLogAction.channel_overwrite_update, discord.AuditLogAction.channel_overwrite_delete]:
         target_channel = entry.target
         
@@ -244,35 +243,36 @@ async def on_audit_log_entry_create(entry):
         await channel.send(embed=embed)
 
 # 8. Gives the role even if the message isn't cached in memory
-@bot.event 
+@bot.event
 async def on_raw_reaction_add(payload):
-if payload.user_id == bot.user.id:
-return
-emoji_str = str(payload.emoji)
-if emoji_str in EMOJI_TO_ROLE:
-guild = bot.get_guild(payload.guild_id)
-if not guild: return
-member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
-role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
-if role and member:
-if emoji_str == CUSTOM_EMOJI_18_PLUS:
-opposite = guild.get_role(ROLE_18_MINUS)
-if opposite and opposite in member.roles: await member.remove_roles(opposite)
-elif emoji_str == CUSTOM_EMOJI_18_MINUS:
-opposite = guild.get_role(ROLE_18_PLUS)
-if opposite and opposite in member.roles: await member.remove_roles(opposite)
-await member.add_roles(role)
+    if payload.user_id == bot.user.id:
+        return
+    emoji_str = str(payload.emoji)
+    if emoji_str in EMOJI_TO_ROLE:
+        guild = bot.get_guild(payload.guild_id)
+        if not guild: return
+        member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
+        role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
+        if role and member:
+            if emoji_str == CUSTOM_EMOJI_18_PLUS:
+                opposite = guild.get_role(ROLE_18_MINUS)
+                if opposite and opposite in member.roles: await member.remove_roles(opposite)
+            elif emoji_str == CUSTOM_EMOJI_18_MINUS:
+                opposite = guild.get_role(ROLE_18_PLUS)
+                if opposite and opposite in member.roles: await member.remove_roles(opposite)
+            await member.add_roles(role)
 
-9. Removes the role even if the message isn't cached in memory
+# 9. Removes the role even if the message isn't cached in memory
 @bot.event
 async def on_raw_reaction_remove(payload):
-emoji_str = str(payload.emoji)
-if emoji_str in EMOJI_TO_ROLE:
-guild = bot.get_guild(payload.guild_id)
-if not guild: return
-member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
-role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
-if role and member: await member.remove_roles(role)
+    emoji_str = str(payload.emoji)
+    if emoji_str in EMOJI_TO_ROLE:
+        guild = bot.get_guild(payload.guild_id)
+        if not guild: return
+        member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
+        role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
+        if role and member: await member.remove_roles(role)
+
 keep_alive()
 rules.add_rules_command(bot)
 bot.run(os.environ.get("DISCORD_TOKEN"))
