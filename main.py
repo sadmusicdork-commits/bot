@@ -5,6 +5,7 @@ from threading import Thread
 from flask import Flask
 import rules
 import urllib.request
+import asyncio  # Added to allow the bot to wait for audit log processing
 
 # --- RENDER AWAKE LOOP FIX ---
 app = Flask('')
@@ -46,7 +47,7 @@ EMOJI_TO_ROLE = {
     CUSTOM_EMOJI_FEMALE: ROLE_FEMALE
 }
 
-# 🛡️ YOUR COPIED STAFF CHAT CHANNEL ID ADDED BELOW
+# 🛡️ YOUR COPIED STAFF CHAT CHANNEL ID
 LOG_CHANNEL_ID = 1538242821075632328  
 
 # Heartbeat loop that pings itself every 5 minutes to stay awake
@@ -102,11 +103,22 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# 6. AUTOMATIC STAFF LOG SYSTEM (FIXED: Added /admire footers)
+# 6. AUTOMATIC STAFF LOG SYSTEM (FIXED: Fetches real member name & ignores server owner)
 @bot.event
 async def on_audit_log_entry_create(entry):
     channel = bot.get_channel(LOG_CHANNEL_ID)
     if not channel:
+        return
+
+    guild = entry.guild
+    if not guild:
+        return
+
+    # Wait a split second to ensure Discord saves the real moderator name in the log history
+    await asyncio.sleep(0.5)
+
+    # SECURE OWNER FILTER: If the person doing the action is the server creator, completely ignore it
+    if entry.user.id == guild.owner_id:
         return
 
     # A. Tracks when a staff member updates someone's roles
@@ -120,7 +132,7 @@ async def on_audit_log_entry_create(entry):
             for role in changes.roles:
                 embed = discord.Embed(
                     title="🛡️ Staff Log: Member Roles Updated",
-                    description=f"**User:** {target.mention} (`{target.id}`)\n**Staff:** {moderator.mention}\n**Role Added:** {role.mention}",
+                    description=f"**User Who Received Role:** {target.mention} (`{target.id}`)\n**User Who Did The Action:** {moderator.mention}\n**Role Added:** {role.mention}",
                     color=discord.Color.green()
                 )
                 embed.set_footer(text="/admire")
@@ -132,7 +144,7 @@ async def on_audit_log_entry_create(entry):
             for role in before_changes.roles:
                 embed = discord.Embed(
                     title="🛡️ Staff Log: Member Roles Updated",
-                    description=f"**User:** {target.mention} (`{target.id}`)\n**Staff:** {moderator.mention}\n**Role Removed:** {role.mention}",
+                    description=f"**User Who Lost Role:** {target.mention} (`{target.id}`)\n**User Who Did The Action:** {moderator.mention}\n**Role Removed:** {role.mention}",
                     color=discord.Color.red()
                 )
                 embed.set_footer(text="/admire")
@@ -144,7 +156,7 @@ async def on_audit_log_entry_create(entry):
         target_channel = entry.target
         embed = discord.Embed(
             title="⚙️ Staff Log: Permissions Changed",
-            description=f"**Staff:** {moderator.mention}\n**Channel:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n**Action:** Modified channel overrides or settings.",
+            description=f"**User Who Did The Action:** {moderator.mention}\n**Channel:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n**Action:** Modified channel overrides or settings.",
             color=discord.Color.orange()
         )
         embed.set_footer(text="/admire")
