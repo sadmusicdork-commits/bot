@@ -19,10 +19,11 @@ def keep_alive():
     t = Thread(target=run_web)
     t.start()
 
-# 1. Background settings to let the bot read messages and members
+# 1. Background settings to let the bot read messages, members, and moderation logs
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+intents.moderation = True  # Allows the bot to read server audit logs
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -45,6 +46,9 @@ EMOJI_TO_ROLE = {
     CUSTOM_EMOJI_FEMALE: ROLE_FEMALE
 }
 
+# 🛡️ YOUR COPIED STAFF CHAT CHANNEL ID ADDED BELOW
+LOG_CHANNEL_ID = 1538242821075632328  
+
 # Heartbeat loop that pings itself every 5 minutes to stay awake
 @tasks.loop(minutes=5)
 async def self_ping():
@@ -60,7 +64,7 @@ async def on_ready():
     if not self_ping.is_running():
         self_ping.start()
 
-# 4. Command to send the clean reaction roles embed message (FIXED: Footer Changed)
+# 4. Command to send the clean reaction roles embed message
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_roles(ctx):
@@ -98,7 +102,55 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# 6. Gives the role even if the message isn't cached in memory
+# 6. AUTOMATIC STAFF LOG SYSTEM (FIXED: Added /admire footers)
+@bot.event
+async def on_audit_log_entry_create(entry):
+    channel = bot.get_channel(LOG_CHANNEL_ID)
+    if not channel:
+        return
+
+    # A. Tracks when a staff member updates someone's roles
+    if entry.action == discord.AuditLogAction.member_role_update:
+        target = entry.target
+        moderator = entry.user
+        
+        # Look at what changed (Roles Added)
+        changes = entry.after
+        if hasattr(changes, 'roles'):
+            for role in changes.roles:
+                embed = discord.Embed(
+                    title="🛡️ Staff Log: Member Roles Updated",
+                    description=f"**User:** {target.mention} (`{target.id}`)\n**Staff:** {moderator.mention}\n**Role Added:** {role.mention}",
+                    color=discord.Color.green()
+                )
+                embed.set_footer(text="/admire")
+                await channel.send(embed=embed)
+        
+        # Double check for removed roles
+        before_changes = entry.before
+        if hasattr(before_changes, 'roles'):
+            for role in before_changes.roles:
+                embed = discord.Embed(
+                    title="🛡️ Staff Log: Member Roles Updated",
+                    description=f"**User:** {target.mention} (`{target.id}`)\n**Staff:** {moderator.mention}\n**Role Removed:** {role.mention}",
+                    color=discord.Color.red()
+                )
+                embed.set_footer(text="/admire")
+                await channel.send(embed=embed)
+
+    # B. Tracks when channel or server permissions are modified
+    elif entry.action in [discord.AuditLogAction.channel_update, discord.AuditLogAction.channel_overwrite_update]:
+        moderator = entry.user
+        target_channel = entry.target
+        embed = discord.Embed(
+            title="⚙️ Staff Log: Permissions Changed",
+            description=f"**Staff:** {moderator.mention}\n**Channel:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n**Action:** Modified channel overrides or settings.",
+            color=discord.Color.orange()
+        )
+        embed.set_footer(text="/admire")
+        await channel.send(embed=embed)
+
+# 7. Gives the role even if the message isn't cached in memory
 @bot.event
 async def on_raw_reaction_add(payload):
     if payload.user_id == bot.user.id:
@@ -132,7 +184,7 @@ async def on_raw_reaction_add(payload):
 
             await member.add_roles(role)
 
-# 7. Removes the role even if the message isn't cached in memory
+# 8. Removes the role even if the message isn't cached in memory
 @bot.event
 async def on_raw_reaction_remove(payload):
     emoji_str = str(payload.emoji)
