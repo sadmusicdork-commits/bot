@@ -6,6 +6,7 @@ from flask import Flask
 import rules
 import urllib.request
 import asyncio
+import re
 
 # --- RENDER AWAKE LOOP FIX ---
 app = Flask('')
@@ -105,7 +106,7 @@ async def on_message(message):
         await message.reply(embed=embed)
 
     await bot.process_commands(message)
-# 6. AUTOMATIC STAFF LOG SYSTEM (UNIVERSAL BOT FILTER INSTALLED)
+# 6. AUTOMATIC STAFF LOG SYSTEM (HUMAN ATTRIBUTION DETECTOR RUNNING)
 @bot.event
 async def on_audit_log_entry_create(entry):
     channel = bot.get_channel(LOG_CHANNEL_ID)
@@ -114,23 +115,37 @@ async def on_audit_log_entry_create(entry):
 
     await asyncio.sleep(0.5)
 
-    # 🛑 UNIVERSAL BOT FILTER: If the user who did the action is ANY bot, ignore it entirely!
-    if entry.user.bot:
+    # Ignore actions done by your own logging bot to avoid duplication loops
+    if entry.user.id == bot.user.id:
         return
 
-    # ABSOLUTE FILTER: Skip logging if the person doing the action matches your owner ID
+    # Skip logging if you personally performed the action manually
     if entry.user.id == SERVER_OWNER_ID:
         return
 
-    moderator = entry.user
+    raw_reason = entry.reason if entry.reason else ""
+    
+    # 🔍 HUMAN MODERATOR EXTRACTOR: If a bot did the action, scan the reason notes for a human mention/ID
+    if entry.user.bot:
+        # Tries to find a user mention or Snowflake ID (17-19 digits) inside the reason text
+        found_id = re.search(r'(\d{17,19})', raw_reason)
+        if found_id:
+            moderator_text = f"<@{found_id.group(1)}>"
+        else:
+            # Fallback text if the moderation bot didn't include the human's ID in the audit note
+            moderator_text = "Staff Member (via Command Bot)"
+    else:
+        # If a real human staff member did it manually, mention them normally
+        moderator_text = entry.user.mention
+
     target = entry.target
-    reason = entry.reason if entry.reason else "No reason provided."
+    display_reason = raw_reason if raw_reason else "No reason provided."
 
     # BAN LOGS
     if entry.action == discord.AuditLogAction.ban:
         embed = discord.Embed(
             title="🔨 Staff Log: Member Banned",
-            description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Was Banned:** {target.mention} (`{target.id}`)\n**Reason:** {reason}",
+            description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Banned:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}",
             color=discord.Color.dark_red()
         )
         embed.set_footer(text="/admire")
@@ -140,7 +155,7 @@ async def on_audit_log_entry_create(entry):
     elif entry.action == discord.AuditLogAction.kick:
         embed = discord.Embed(
             title="👢 Staff Log: Member Kicked",
-            description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Was Kicked:** {target.mention} (`{target.id}`)\n**Reason:** {reason}",
+            description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Kicked:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}",
             color=discord.Color.red()
         )
         embed.set_footer(text="/admire")
@@ -152,7 +167,7 @@ async def on_audit_log_entry_create(entry):
         if hasattr(changes, 'timed_out_until') and changes.timed_out_until is not None:
             embed = discord.Embed(
                 title="🔇 Staff Log: Member Muted (Timeout)",
-                description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Was Muted:** {target.mention} (`{target.id}`)\n**Muted Until:** {changes.timed_out_until.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+                description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Muted:** {target.mention} (`{target.id}`)\n**Muted Until:** {changes.timed_out_until.strftime('%Y-%m-%d %H:%M:%S')} UTC",
                 color=discord.Color.orange()
             )
             embed.set_footer(text="/admire")
@@ -164,7 +179,7 @@ async def on_audit_log_entry_create(entry):
             for role in entry.after.roles:
                 embed = discord.Embed(
                     title="🛡️ Staff Log: Role Assigned",
-                    description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Received Role:** {target.mention} (`{target.id}`)\n**Role Added:** {role.mention}",
+                    description=f"**User Who Did The Action:** {moderator_text}\n**User Who Received Role:** {target.mention} (`{target.id}`)\n**Role Added:** {role.mention}",
                     color=discord.Color.green()
                 )
                 embed.set_footer(text="/admire")
@@ -173,7 +188,7 @@ async def on_audit_log_entry_create(entry):
             for role in entry.before.roles:
                 embed = discord.Embed(
                     title="🛡️ Staff Log: Role Removed",
-                    description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Lost Role:** {target.mention} (`{target.id}`)\n**Role Removed:** {role.mention}",
+                    description=f"**User Who Did The Action:** {moderator_text}\n**User Who Lost Role:** {target.mention} (`{target.id}`)\n**Role Removed:** {role.mention}",
                     color=discord.Color.red()
                 )
                 embed.set_footer(text="/admire")
@@ -198,7 +213,7 @@ async def on_audit_log_entry_create(entry):
 
         embed = discord.Embed(
             title=card_title,
-            description=f"**User Who Did The Action:** {moderator.mention}\n**Channel Modified:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n{label_text}",
+            description=f"**User Who Did The Action:** {moderator_text}\n**Channel Modified:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n{label_text}",
             color=card_color
         )
         embed.set_footer(text="/admire")
