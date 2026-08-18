@@ -105,50 +105,8 @@ async def on_message(message):
         await message.reply(embed=embed)
 
     await bot.process_commands(message)
-# 6. CONNECTED PROFILE ALT MATCH SCANNER (EXACT REQUESTED FIELDS)
-@bot.event
-async def on_member_join(member):
-    channel = bot.get_channel(LOG_CHANNEL_ID)
-    if not channel:
-        return
 
-    # A. Check for cloned profile images matching users already in the server
-    if member.avatar:
-        new_avatar_key = member.avatar.key
-        
-        for existing_member in member.guild.members:
-            if existing_member.id == member.id or not existing_member.avatar:
-                continue
-                
-            if existing_member.avatar.key == new_avatar_key:
-                embed = discord.Embed(
-                    title="⚠️ Security Alert: Connected Alt Account Logged",
-                    description=f"**User who joined:** {member.mention} (`{member.id}`)\n"
-                                f"**Suspected alt:** {existing_member.mention} (`{existing_member.id}`)\n\n"
-                                f"**Match Signature:** Identical avatar data assets detected.",
-                    color=discord.Color.orange()
-                )
-                embed.set_footer(text="/admire")
-                await channel.send(embed=embed)
-                return
-
-    # B. Secondary Check: Check for username clone pattern similarities 
-    for existing_member in member.guild.members:
-        if existing_member.id == member.id:
-            continue
-        if len(member.name) > 4 and member.name.lower() in existing_member.name.lower():
-            embed = discord.Embed(
-                title="⚠️ Security Alert: Connected Alt Account Logged",
-                description=f"**User who joined:** {member.mention} (`{member.id}`)\n"
-                            f"**Suspected alt:** {existing_member.mention} (`{existing_member.id}`)\n\n"
-                            f"**Match Signature:** Cloned username character string similarity caught.",
-                color=discord.Color.orange()
-            )
-            embed.set_footer(text="/admire")
-            await channel.send(embed=embed)
-            return
-
-# 7. AUTOMATIC STAFF LOG SYSTEM (COMPLETELY DYNAMIC LABELS PER EVENT)
+# 6. AUTOMATIC STAFF LOG SYSTEM (DYNAMIC PERMISSION LABELS INTEGRATED)
 @bot.event
 async def on_audit_log_entry_create(entry):
     channel = bot.get_channel(LOG_CHANNEL_ID)
@@ -217,10 +175,11 @@ async def on_audit_log_entry_create(entry):
                 embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
 
-    # CHANNEL PERMISSION OVERWRITE LOGS
+    # CHANNEL PERMISSION OVERWRITE LOGS (DYNAMIC: Added vs Removed vs Changed Checks)
     elif entry.action in [discord.AuditLogAction.channel_overwrite_create, discord.AuditLogAction.channel_overwrite_update, discord.AuditLogAction.channel_overwrite_delete]:
         target_channel = entry.target
         
+        # Decide exact operational layout sentence label dynamically
         if entry.action == discord.AuditLogAction.channel_overwrite_create:
             label_text = "**Permission added:** New role/user override locks activated."
             card_title = "⚙️ Staff Log: Channel Permission Added"
@@ -230,7 +189,7 @@ async def on_audit_log_entry_create(entry):
             card_title = "⚙️ Staff Log: Channel Permission Removed"
             card_color = discord.Color.red()
         else:
-            label_text = "**Permission changed:** View channel, text message, or attachment toggle flags updated."
+            label_text = "**Permission changed:** View, text chat, or media toggle flags adjusted."
             card_title = "⚙️ Staff Log: Channel Permission Changed"
             card_color = discord.Color.orange()
 
@@ -242,7 +201,7 @@ async def on_audit_log_entry_create(entry):
         embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
-# 8. Gives the role even if the message isn't cached in memory
+# 7. Gives the role even if the message isn't cached in memory
 @bot.event
 async def on_raw_reaction_add(payload):
     if payload.user_id == bot.user.id:
@@ -262,7 +221,7 @@ async def on_raw_reaction_add(payload):
                 if opposite and opposite in member.roles: await member.remove_roles(opposite)
             await member.add_roles(role)
 
-# 9. Removes the role even if the message isn't cached in memory
+# 8. Removes the role even if the message isn't cached in memory
 @bot.event
 async def on_raw_reaction_remove(payload):
     emoji_str = str(payload.emoji)
