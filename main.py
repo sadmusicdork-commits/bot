@@ -5,7 +5,7 @@ from threading import Thread
 from flask import Flask
 import rules
 import urllib.request
-import asyncio  # Added to allow the bot to wait for audit log processing
+import asyncio
 
 # --- RENDER AWAKE LOOP FIX ---
 app = Flask('')
@@ -47,8 +47,11 @@ EMOJI_TO_ROLE = {
     CUSTOM_EMOJI_FEMALE: ROLE_FEMALE
 }
 
-# 🛡️ YOUR COPIED STAFF CHAT CHANNEL ID
+# 🛡️ SYSTEM INTEGRATION CHANNELS AND FILTERS
 LOG_CHANNEL_ID = 1538242821075632328  
+
+# 👑 YOUR HARDCODED PERSONAL DISCORD USER ID SAVED BELOW
+SERVER_OWNER_ID = 1232481355309387857  
 
 # Heartbeat loop that pings itself every 5 minutes to stay awake
 @tasks.loop(minutes=5)
@@ -103,22 +106,18 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# 6. AUTOMATIC STAFF LOG SYSTEM (FIXED: Fetches real member name & ignores server owner)
+# 6. AUTOMATIC STAFF LOG SYSTEM (Fixed absolute filter layout)
 @bot.event
 async def on_audit_log_entry_create(entry):
     channel = bot.get_channel(LOG_CHANNEL_ID)
     if not channel:
         return
 
-    guild = entry.guild
-    if not guild:
-        return
-
-    # Wait a split second to ensure Discord saves the real moderator name in the log history
+    # Wait a split second to make sure Discord registers log entry metadata
     await asyncio.sleep(0.5)
 
-    # SECURE OWNER FILTER: If the person doing the action is the server creator, completely ignore it
-    if entry.user.id == guild.owner_id:
+    # ABSOLUTE FILTER: If the user match your unique owner ID, skip logging completely
+    if entry.user.id == SERVER_OWNER_ID:
         return
 
     # A. Tracks when a staff member updates someone's roles
