@@ -60,7 +60,7 @@ async def on_ready():
     if not self_ping.is_running():
         self_ping.start()
 
-# 4. Command to send the clean reaction roles embed message
+# 4. Command to send the clean reaction roles embed message (FIXED: Footer Changed)
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_roles(ctx):
@@ -76,35 +76,29 @@ async def setup_roles(ctx):
         value="• Choose **one** age role.\n• Gender roles are optional.\n• Roles can be changed at any time.", 
         inline=False
     )
-    embed.set_footer(text="꒰১ ໒꒱ • Role Selection")
+    embed.set_footer(text="/admire • Role Selection")
 
     msg = await ctx.send(embed=embed)
     for emoji in EMOJI_TO_ROLE.keys():
         await msg.add_reaction(emoji)
 
-# 5. NEW AUTOMATIC CHAT RESPONDER
-# This scans normal messages and replies instantly if someone says "pic perms"
+# 5. AUTOMATIC CHAT RESPONDER
 @bot.event
 async def on_message(message):
     if message.author.bot:
-        return  # Stop the bot from responding to itself or other bots
+        return
 
-    # Convert chat text to lowercase so "Pic Perms" or "PIC PERMS" both trigger it
     if "pic perms" in message.content.lower():
         embed = discord.Embed(
-            title="Picture Permissions",
             description="rep **/admire** in status or **boost** for pic perms",
             color=discord.Color.dark_theme()
         )
         embed.set_footer(text="꒰১ ໒꒱ • Media Access")
-        
-        # Reply directly to the person who asked for pic perms
         await message.reply(embed=embed)
 
-    # Crucial line to ensure manual commands like !setup_roles and !setup_rules still work!
     await bot.process_commands(message)
 
-# 6. Code that gives the role when a member clicks the reaction
+# 6. Gives the role even if the message isn't cached in memory
 @bot.event
 async def on_raw_reaction_add(payload):
     if payload.user_id == bot.user.id:
@@ -114,29 +108,47 @@ async def on_raw_reaction_add(payload):
     
     if emoji_str in EMOJI_TO_ROLE:
         guild = bot.get_guild(payload.guild_id)
+        if not guild:
+            return
+
         member = guild.get_member(payload.user_id)
+        if not member:
+            try:
+                member = await guild.fetch_member(payload.user_id)
+            except discord.HTTPException:
+                return
+
         role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
         
         if role and member:
             if emoji_str == CUSTOM_EMOJI_18_PLUS:
                 opposite = guild.get_role(ROLE_18_MINUS)
-                if opposite in member.roles:
+                if opposite and opposite in member.roles:
                     await member.remove_roles(opposite)
             elif emoji_str == CUSTOM_EMOJI_18_MINUS:
                 opposite = guild.get_role(ROLE_18_PLUS)
-                if opposite in member.roles:
+                if opposite and opposite in member.roles:
                     await member.remove_roles(opposite)
 
             await member.add_roles(role)
 
-# 7. Code that removes the role if a member unchecks the reaction
+# 7. Removes the role even if the message isn't cached in memory
 @bot.event
 async def on_raw_reaction_remove(payload):
     emoji_str = str(payload.emoji)
     
     if emoji_str in EMOJI_TO_ROLE:
         guild = bot.get_guild(payload.guild_id)
+        if not guild:
+            return
+
         member = guild.get_member(payload.user_id)
+        if not member:
+            try:
+                member = await guild.fetch_member(payload.user_id)
+            except discord.HTTPException:
+                return
+
         role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
         
         if role and member:
