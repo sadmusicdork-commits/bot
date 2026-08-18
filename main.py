@@ -106,117 +106,173 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# 6. AUTOMATIC STAFF LOG SYSTEM (Fixed absolute filter layout)
+# 6. CONNECTED PROFILE ALT MATCH SCANNER (EXACT REQUESTED FIELDS)
+@bot.event
+async def on_member_join(member):
+    channel = bot.get_channel(LOG_CHANNEL_ID)
+    if not channel:
+        return
+
+    # A. Check for cloned profile images matching users already in the server
+    if member.avatar:
+        new_avatar_key = member.avatar.key
+        
+        for existing_member in member.guild.members:
+            if existing_member.id == member.id or not existing_member.avatar:
+                continue
+                
+            if existing_member.avatar.key == new_avatar_key:
+                embed = discord.Embed(
+                    title="⚠️ Security Alert: Connected Alt Account Logged",
+                    description=f"**User who joined:** {member.mention} (`{member.id}`)\n"
+                                f"**Suspected alt:** {existing_member.mention} (`{existing_member.id}`)\n\n"
+                                f"**Match Signature:** Identical avatar data assets detected.",
+                    color=discord.Color.orange()
+                )
+                embed.set_footer(text="/admire")
+                await channel.send(embed=embed)
+                return
+
+    # B. Secondary Check: Check for username clone pattern similarities 
+    for existing_member in member.guild.members:
+        if existing_member.id == member.id:
+            continue
+        if len(member.name) > 4 and member.name.lower() in existing_member.name.lower():
+            embed = discord.Embed(
+                title="⚠️ Security Alert: Connected Alt Account Logged",
+                description=f"**User who joined:** {member.mention} (`{member.id}`)\n"
+                            f"**Suspected alt:** {existing_member.mention} (`{existing_member.id}`)\n\n"
+                            f"**Match Signature:** Cloned username character string similarity caught.",
+                color=discord.Color.orange()
+            )
+            embed.set_footer(text="/admire")
+            await channel.send(embed=embed)
+            return
+
+# 7. AUTOMATIC STAFF LOG SYSTEM (COMPLETELY DYNAMIC LABELS PER EVENT)
 @bot.event
 async def on_audit_log_entry_create(entry):
     channel = bot.get_channel(LOG_CHANNEL_ID)
     if not channel:
         return
 
-    # Wait a split second to make sure Discord registers log entry metadata
     await asyncio.sleep(0.5)
 
-    # ABSOLUTE FILTER: If the user match your unique owner ID, skip logging completely
-    if entry.user.id == SERVER_OWNER_ID:
+    if entry.user.id == bot.user.id or entry.user.id == SERVER_OWNER_ID:
         return
 
-    # A. Tracks when a staff member updates someone's roles
-    if entry.action == discord.AuditLogAction.member_role_update:
-        target = entry.target
-        moderator = entry.user
-        
-        # Look at what changed (Roles Added)
+    moderator = entry.user
+    target = entry.target
+    reason = entry.reason if entry.reason else "No reason provided."
+
+    # BAN LOGS
+    if entry.action == discord.AuditLogAction.ban:
+        embed = discord.Embed(
+            title="🔨 Staff Log: Member Banned",
+            description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Was Banned:** {target.mention} (`{target.id}`)\n**Reason:** {reason}",
+            color=discord.Color.dark_red()
+        )
+        embed.set_footer(text="/admire")
+        await channel.send(embed=embed)
+
+    # KICK LOGS
+    elif entry.action == discord.AuditLogAction.kick:
+        embed = discord.Embed(
+            title="👢 Staff Log: Member Kicked",
+            description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Was Kicked:** {target.mention} (`{target.id}`)\n**Reason:** {reason}",
+            color=discord.Color.red()
+        )
+        embed.set_footer(text="/admire")
+        await channel.send(embed=embed)
+
+    # TIMEOUT LOGS
+    elif entry.action == discord.AuditLogAction.member_update:
         changes = entry.after
-        if hasattr(changes, 'roles'):
-            for role in changes.roles:
+        if hasattr(changes, 'timed_out_until') and changes.timed_out_until is not None:
+            embed = discord.Embed(
+                title="🔇 Staff Log: Member Muted (Timeout)",
+                description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Was Muted:** {target.mention} (`{target.id}`)\n**Muted Until:** {changes.timed_out_until.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+                color=discord.Color.orange()
+            )
+            embed.set_footer(text="/admire")
+            await channel.send(embed=embed)
+
+    # ROLE LOGS
+    elif entry.action == discord.AuditLogAction.member_role_update:
+        if hasattr(entry.after, 'roles'):
+            for role in entry.after.roles:
                 embed = discord.Embed(
-                    title="🛡️ Staff Log: Member Roles Updated",
-                    description=f"**User Who Received Role:** {target.mention} (`{target.id}`)\n**User Who Did The Action:** {moderator.mention}\n**Role Added:** {role.mention}",
+                    title="🛡️ Staff Log: Role Assigned",
+                    description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Received Role:** {target.mention} (`{target.id}`)\n**Role Added:** {role.mention}",
                     color=discord.Color.green()
                 )
                 embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
-        
-        # Double check for removed roles
-        before_changes = entry.before
-        if hasattr(before_changes, 'roles'):
-            for role in before_changes.roles:
+        if hasattr(entry.before, 'roles'):
+            for role in entry.before.roles:
                 embed = discord.Embed(
-                    title="🛡️ Staff Log: Member Roles Updated",
-                    description=f"**User Who Lost Role:** {target.mention} (`{target.id}`)\n**User Who Did The Action:** {moderator.mention}\n**Role Removed:** {role.mention}",
+                    title="🛡️ Staff Log: Role Removed",
+                    description=f"**User Who Did The Action:** {moderator.mention}\n**User Who Lost Role:** {target.mention} (`{target.id}`)\n**Role Removed:** {role.mention}",
                     color=discord.Color.red()
                 )
                 embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
 
-    # B. Tracks when channel or server permissions are modified
-    elif entry.action in [discord.AuditLogAction.channel_update, discord.AuditLogAction.channel_overwrite_update]:
-        moderator = entry.user
+    # CHANNEL PERMISSION OVERWRITE LOGS (DYNAMIC SETTING PERMISSIONS OPERATIONAL LABELS)
+    elif entry.action in [discord.AuditLogAction.channel_overwrite_create, discord.AuditLogAction.channel_overwrite_update, discord.AuditLogAction.channel_overwrite_delete]:
         target_channel = entry.target
+        
+        if entry.action == discord.AuditLogAction.channel_overwrite_create:
+            label_text = "**Permission added:** New role/user override locks activated."
+            card_title = "⚙️ Staff Log: Channel Permission Added"
+            card_color = discord.Color.green()
+        elif entry.action == discord.AuditLogAction.channel_overwrite_delete:
+            label_text = "**Permission removed:** Role/user override clears completely deleted."
+            card_title = "⚙️ Staff Log: Channel Permission Removed"
+            card_color = discord.Color.red()
+        else:
+            label_text = "**Permission changed:** View channel, text message, or attachment toggle flags updated."
+            card_title = "⚙️ Staff Log: Channel Permission Changed"
+            card_color = discord.Color.orange()
+
         embed = discord.Embed(
-            title="⚙️ Staff Log: Permissions Changed",
-            description=f"**User Who Did The Action:** {moderator.mention}\n**Channel:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n**Action:** Modified channel overrides or settings.",
-            color=discord.Color.orange()
+            title=card_title,
+            description=f"**User Who Did The Action:** {moderator.mention}\n**Channel Modified:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n{label_text}",
+            color=card_color
         )
         embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
-# 7. Gives the role even if the message isn't cached in memory
-@bot.event
+# 8. Gives the role even if the message isn't cached in memory
+@bot.event 
 async def on_raw_reaction_add(payload):
-    if payload.user_id == bot.user.id:
-        return
+if payload.user_id == bot.user.id:
+return
+emoji_str = str(payload.emoji)
+if emoji_str in EMOJI_TO_ROLE:
+guild = bot.get_guild(payload.guild_id)
+if not guild: return
+member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
+role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
+if role and member:
+if emoji_str == CUSTOM_EMOJI_18_PLUS:
+opposite = guild.get_role(ROLE_18_MINUS)
+if opposite and opposite in member.roles: await member.remove_roles(opposite)
+elif emoji_str == CUSTOM_EMOJI_18_MINUS:
+opposite = guild.get_role(ROLE_18_PLUS)
+if opposite and opposite in member.roles: await member.remove_roles(opposite)
+await member.add_roles(role)
 
-    emoji_str = str(payload.emoji)
-    
-    if emoji_str in EMOJI_TO_ROLE:
-        guild = bot.get_guild(payload.guild_id)
-        if not guild:
-            return
-
-        member = guild.get_member(payload.user_id)
-        if not member:
-            try:
-                member = await guild.fetch_member(payload.user_id)
-            except discord.HTTPException:
-                return
-
-        role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
-        
-        if role and member:
-            if emoji_str == CUSTOM_EMOJI_18_PLUS:
-                opposite = guild.get_role(ROLE_18_MINUS)
-                if opposite and opposite in member.roles:
-                    await member.remove_roles(opposite)
-            elif emoji_str == CUSTOM_EMOJI_18_MINUS:
-                opposite = guild.get_role(ROLE_18_PLUS)
-                if opposite and opposite in member.roles:
-                    await member.remove_roles(opposite)
-
-            await member.add_roles(role)
-
-# 8. Removes the role even if the message isn't cached in memory
+9. Removes the role even if the message isn't cached in memory
 @bot.event
 async def on_raw_reaction_remove(payload):
-    emoji_str = str(payload.emoji)
-    
-    if emoji_str in EMOJI_TO_ROLE:
-        guild = bot.get_guild(payload.guild_id)
-        if not guild:
-            return
-
-        member = guild.get_member(payload.user_id)
-        if not member:
-            try:
-                member = await guild.fetch_member(payload.user_id)
-            except discord.HTTPException:
-                return
-
-        role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
-        
-        if role and member:
-            await member.remove_roles(role)
-
+emoji_str = str(payload.emoji)
+if emoji_str in EMOJI_TO_ROLE:
+guild = bot.get_guild(payload.guild_id)
+if not guild: return
+member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
+role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
+if role and member: await member.remove_roles(role)
 keep_alive()
 rules.add_rules_command(bot)
 bot.run(os.environ.get("DISCORD_TOKEN"))
