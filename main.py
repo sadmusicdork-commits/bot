@@ -169,6 +169,7 @@ class VoiceControlView(discord.ui.View):
     @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_CLAIM, custom_id="vc_claim", row=0)
     async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("👑 Checking channel ownership privileges...", ephemeral=True)
+
     @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_DISCONNECT, custom_id="vc_disconnect", row=1)
     async def disconnect_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("🚫 Usage: Disconnect active profiles from your voice lounge.", ephemeral=True)
@@ -227,6 +228,52 @@ async def voicepanel(ctx):
     
     view = VoiceControlView()
     await ctx.send(embed=embed, view=view)
+
+# 5b. !permit command — lets a specific member into your current voice channel
+@bot.command()
+async def permit(ctx, member: discord.Member = None):
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await ctx.send("❌ You need to be in a voice channel to use this.")
+        return
+
+    if member is None:
+        await ctx.send("❌ Usage: `!permit @user`")
+        return
+
+    channel = ctx.author.voice.channel
+
+    overwrite = channel.overwrites_for(member)
+    overwrite.connect = True
+    overwrite.view_channel = True
+    await channel.set_permissions(member, overwrite=overwrite)
+
+    embed = discord.Embed(
+        description=f"✅ {member.mention} has been permitted into {channel.mention}.",
+        color=discord.Color.dark_theme()
+    )
+    embed.set_footer(text="/admire • interface")
+    await ctx.send(embed=embed)
+
+# 5c. !unpermit command — revokes access previously granted with !permit
+@bot.command()
+async def unpermit(ctx, member: discord.Member = None):
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await ctx.send("❌ You need to be in a voice channel to use this.")
+        return
+
+    if member is None:
+        await ctx.send("❌ Usage: `!unpermit @user`")
+        return
+
+    channel = ctx.author.voice.channel
+    await channel.set_permissions(member, overwrite=None)
+
+    embed = discord.Embed(
+        description=f"🚫 {member.mention}'s access to {channel.mention} has been revoked.",
+        color=discord.Color.dark_theme()
+    )
+    embed.set_footer(text="/admire • interface")
+    await ctx.send(embed=embed)
 
 # 6. AUTOMATIC STAFF LOG SYSTEM (HUMAN ATTRIBUTION DETECTOR RUNNING)
 @bot.event
