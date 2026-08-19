@@ -7,6 +7,8 @@ import rules
 import urllib.request
 import asyncio
 import re
+import random
+import json
 
 # --- RENDER AWAKE LOOP FIX ---
 app = Flask('')
@@ -27,6 +29,7 @@ intents.members = True
 intents.message_content = True
 intents.moderation = True  # Allows the bot to read server audit logs
 
+# NOTE: single prefix — every command below (including !vc, !ping, etc.) uses "!"
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # 2. YOUR DISCORD SERVER ROLE IDS
@@ -65,6 +68,35 @@ LOG_CHANNEL_ID = 1538242821075632328
 
 # 👑 YOUR HARDCODED PERSONAL DISCORD USER ID SAVED BELOW
 SERVER_OWNER_ID = 1232481355309387857  
+
+# 🔐 PERSISTENT SECURITY DATA (whitelist, blacklist, jail channel, anti-nuke toggle)
+DATA_FILE = "bot_data.json"
+
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    return {"whitelist": [], "blacklist": [], "jail_channel": None, "antinuke": True}
+
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump(bot_data, f, indent=2)
+
+bot_data = load_data()
+
+# In-memory anti-nuke tracking (resets on restart) and snipe cache
+recent_actions = {}  # user_id -> list of recent destructive-action timestamps
+DESTRUCTIVE_ACTIONS = {
+    discord.AuditLogAction.channel_delete,
+    discord.AuditLogAction.channel_create,
+    discord.AuditLogAction.role_delete,
+    discord.AuditLogAction.ban,
+    discord.AuditLogAction.webhook_create,
+}
+ANTINUKE_THRESHOLD = 3       # number of actions...
+ANTINUKE_WINDOW_SECONDS = 10 # ...within this many seconds triggers a response
+
+deleted_messages = {}  # channel_id -> {"content", "author", "time"} for !snipe
 
 # Heartbeat loop that pings itself every 5 minutes to stay awake
 @tasks.loop(minutes=5)
@@ -254,30 +286,241 @@ async def permit(ctx, member: discord.Member = None):
     embed.set_footer(text="/admire • interface")
     await ctx.send(embed=embed)
 
-# 5c. !vc reject — revokes access previously granted with !permit
+# 5c. !vc command group — text-command versions of every voicepanel button
 @bot.group(invoke_without_command=True)
 async def vc(ctx):
-    await ctx.send("❌ Usage: `!vc reject @user`")
-
-@vc.command(name="reject")
-async def vc_reject(ctx, member: discord.Member = None):
-    if not ctx.author.voice or not ctx.author.voice.channel:
-        await ctx.send("❌ You need to be in a voice channel to use this.")
-        return
-
-    if member is None:
-        await ctx.send("❌ Usage: `!vc reject @user`")
-        return
-
-    channel = ctx.author.voice.channel
-    await channel.set_permissions(member, overwrite=None)
-
     embed = discord.Embed(
-        description=f"🚫 {member.mention}'s access to {channel.mention} has been revoked.",
+        description=(
+            "**!vc lock** — lock the voice channel\n"
+            "**!vc unlock** — unlock the voice channel\n"
+            "**!vc ghost** — hide the voice channel\n"
+            "**!vc reveal** — unhide the voice channel\n"
+            "**!vc claim** — claim the voice channel\n"
+            "**!vc disconnect @user** — disconnect a member\n"
+            "**!vc activity** — start an activity\n"
+            "**!vc info** — view channel information\n"
+            "**!vc increase** — increase the user limit\n"
+            "**!vc decrease** — decrease the user limit\n"
+            "**!vc permit @user** — let a user into the channel\n"
+            "**!vc reject @user** — revoke a user's access"
+        ),
         color=discord.Color.dark_theme()
     )
     embed.set_footer(text="/admire • interface")
     await ctx.send(embed=embed)
+
+async def _get_author_vc(ctx):
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await ctx.send("❌ You must be connected to a voice channel to control it!")
+        return None
+    return ctx.author.voice.channel
+
+@vc.command(name="lock")
+async def vc_lock(ctx):
+    channel = await _get_author_vc(ctx)
+    if channel:
+        overwrite = channel.overwrites_for(ctx.guild.default_role)
+        overwrite.connect = False
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(f"🔒 Locked voice channel: {channel.mention}")
+
+@vc.command(name="unlock")
+async def vc_unlock(ctx):
+    channel = await _get_author_vc(ctx)
+    if channel:
+        overwrite = channel.overwrites_for(ctx.guild.default_role)
+        overwrite.connect = True
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(f"🔓 Unlocked voice channel: {channel.mention}")
+
+@vc.command(name="ghost")
+async def vc_ghost(ctx):
+    channel = await _get_author_vc(ctx)
+    if channel:
+        overwrite = channel.overwrites_for(ctx.guild.default_role)
+        overwrite.view_channel = False
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(f"👻 Hidden voice channel: {channel.mention}")
+
+@vc.command(name="reveal")
+async def vc_reveal(ctx):
+    channel = await _get_author_vc(ctx)
+    if channel:
+        overwrite = channel.overwrites_for(ctx.guild.default_role)
+        overwrite.view_channel = True
+        await channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        await ctx.send(f"👁️ Revealed voice channel: {channel.mention}")
+
+@vc.command(name="claim")
+async def vc_claim(ctx):
+    channel = await _get_author_vc(ctx)
+    if channel:
+        await ctx.send("👑 Checking channel ownership privileges...")
+
+@vc.command(name="disconnect")
+async def vc_disconnect(ctx, member: discord.Member = None):
+    channel = await _get_author_vc(ctx)
+    if not channel:
+        return
+    if member is None:
+        await ctx.send("❌ Usage: `!vc disconnect @user`")
+        return
+    if not member.voice or member.voice.channel != channel:
+        await ctx.send(f"❌ {member.mention} isn't in {channel.mention}.")
+        return
+    await member.move_to(None)
+    await ctx.send(f"🚫 Disconnected {member.mention} from {channel.mention}.")
+
+@vc.command(name="activity")
+async def vc_activity(ctx):
+    channel = await _get_author_vc(ctx)
+    if channel:
+        await ctx.send("🎮 Discord activities session initialized.")
+
+@vc.command(name="info")
+async def vc_info(ctx):
+    channel = await _get_author_vc(ctx)
+    if channel:
+        await ctx.send(f"ℹ️ **Channel Info:** Name: `{channel.name}` | Limit: `{channel.user_limit if channel.user_limit else 'Unlimited'}` members.")
+
+@vc.command(name="increase")
+async def vc_increase(ctx):
+    channel = await _get_author_vc(ctx)
+    if channel:
+        new_limit = (channel.user_limit + 1) if channel.user_limit < 99 else 99
+        await channel.edit(user_limit=new_limit)
+        await ctx.send(f"➕ User limit increased to `{new_limit}`.")
+
+@vc.command(name="decrease")
+async def vc_decrease(ctx):
+    channel = await _get_author_vc(ctx)
+    if channel:
+        new_limit = (channel.user_limit - 1) if channel.user_limit > 1 else 1
+        await channel.edit(user_limit=new_limit)
+        await ctx.send(f"➖ User limit decreased to `{new_limit}`.")
+
+@vc.command(name="permit")
+async def vc_permit(ctx, member: discord.Member = None):
+    channel = await _get_author_vc(ctx)
+    if not channel:
+        return
+    if member is None:
+        await ctx.send("❌ Usage: `!vc permit @user`")
+        return
+    overwrite = channel.overwrites_for(member)
+    overwrite.connect = True
+    overwrite.view_channel = True
+    await channel.set_permissions(member, overwrite=overwrite)
+    await ctx.send(f"✅ {member.mention} has been permitted into {channel.mention}.")
+
+@vc.command(name="reject")
+async def vc_reject(ctx, member: discord.Member = None):
+    channel = await _get_author_vc(ctx)
+    if not channel:
+        return
+    if member is None:
+        await ctx.send("❌ Usage: `!vc reject @user`")
+        return
+    await channel.set_permissions(member, overwrite=None)
+    await ctx.send(f"🚫 {member.mention}'s access to {channel.mention} has been revoked.")
+
+# 5d. GENERAL / COMMUNITY COMMANDS
+
+@bot.command()
+async def ping(ctx):
+    latency = round(bot.latency * 1000)
+    embed = discord.Embed(description=f"🏓 Pong! `{latency}ms`", color=discord.Color.dark_theme())
+    embed.set_footer(text="/admire • interface")
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def userinfo(ctx, member: discord.Member = None):
+    member = member or ctx.author
+    embed = discord.Embed(title=f"User Info — {member}", color=discord.Color.dark_theme())
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(name="ID", value=member.id)
+    embed.add_field(name="Joined Server", value=member.joined_at.strftime('%Y-%m-%d') if member.joined_at else "Unknown")
+    embed.add_field(name="Account Created", value=member.created_at.strftime('%Y-%m-%d'))
+    embed.add_field(name="Top Role", value=member.top_role.mention, inline=False)
+    embed.set_footer(text="/admire • interface")
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def serverinfo(ctx):
+    guild = ctx.guild
+    embed = discord.Embed(title=guild.name, color=discord.Color.dark_theme())
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    embed.add_field(name="Members", value=guild.member_count)
+    embed.add_field(name="Owner", value=guild.owner.mention if guild.owner else "Unknown")
+    embed.add_field(name="Created", value=guild.created_at.strftime('%Y-%m-%d'))
+    embed.add_field(name="Roles", value=len(guild.roles))
+    embed.add_field(name="Channels", value=len(guild.channels))
+    embed.set_footer(text="/admire • interface")
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def avatar(ctx, member: discord.Member = None):
+    member = member or ctx.author
+    embed = discord.Embed(title=f"{member}'s Avatar", color=discord.Color.dark_theme())
+    embed.set_image(url=member.display_avatar.url)
+    embed.set_footer(text="/admire • interface")
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def roleinfo(ctx, *, role: discord.Role):
+    embed = discord.Embed(title=f"Role Info — {role.name}", color=role.color if role.color.value else discord.Color.dark_theme())
+    embed.add_field(name="ID", value=role.id)
+    embed.add_field(name="Members", value=len(role.members))
+    embed.add_field(name="Position", value=role.position)
+    embed.add_field(name="Mentionable", value=str(role.mentionable))
+    embed.set_footer(text="/admire • interface")
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def poll(ctx, *, question):
+    embed = discord.Embed(title="📊 Poll", description=question, color=discord.Color.dark_theme())
+    embed.set_footer(text=f"Poll started by {ctx.author}")
+    msg = await ctx.send(embed=embed)
+    await msg.add_reaction("👍")
+    await msg.add_reaction("👎")
+
+@bot.command()
+async def coinflip(ctx):
+    await ctx.send(f"🪙 {random.choice(['Heads', 'Tails'])}")
+
+@bot.command(name="8ball")
+async def eight_ball(ctx, *, question=None):
+    if not question:
+        await ctx.send("❌ Usage: `!8ball <question>`")
+        return
+    responses = ["Yes.", "No.", "Maybe.", "Ask again later.", "Definitely.", "Unlikely.", "Absolutely not."]
+    await ctx.send(f"🎱 {random.choice(responses)}")
+
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def say(ctx, *, message):
+    await ctx.message.delete()
+    await ctx.send(message)
+
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def clear(ctx, amount: int = 5):
+    deleted = await ctx.channel.purge(limit=amount + 1)
+    msg = await ctx.send(f"🧹 Deleted {len(deleted) - 1} messages.")
+    await msg.delete(delay=3)
+
+@bot.command()
+@commands.has_permissions(kick_members=True)
+async def kick(ctx, member: discord.Member, *, reason=None):
+    await member.kick(reason=reason)
+    await ctx.send(f"👢 Kicked {member.mention}. Reason: {reason or 'No reason provided.'}")
+
+@bot.command()
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member, *, reason=None):
+    await member.ban(reason=reason)
+    await ctx.send(f"🔨 Banned {member.mention}. Reason: {reason or 'No reason provided.'}")
 
 # 6. AUTOMATIC STAFF LOG SYSTEM (HUMAN ATTRIBUTION DETECTOR RUNNING)
 @bot.event
@@ -287,6 +530,29 @@ async def on_audit_log_entry_create(entry):
     await asyncio.sleep(0.5)
 
     if entry.user.id == bot.user.id or entry.user.id == SERVER_OWNER_ID: return
+
+    # 🛡️ ANTI-NUKE CHECK — runs before the regular logging below
+    if bot_data["antinuke"] and entry.action in DESTRUCTIVE_ACTIONS and entry.user.id not in bot_data["whitelist"]:
+        now = asyncio.get_event_loop().time()
+        timestamps = [t for t in recent_actions.get(entry.user.id, []) if now - t < ANTINUKE_WINDOW_SECONDS]
+        timestamps.append(now)
+        recent_actions[entry.user.id] = timestamps
+
+        if len(timestamps) >= ANTINUKE_THRESHOLD:
+            recent_actions[entry.user.id] = []
+            actor = entry.guild.get_member(entry.user.id)
+            if actor:
+                try:
+                    await actor.ban(reason="Anti-nuke: rapid destructive actions detected")
+                except discord.Forbidden:
+                    pass
+            alert = discord.Embed(
+                title="🚨 Anti-Nuke Triggered",
+                description=f"{entry.user.mention} (`{entry.user.id}`) tripped anti-nuke protection and was banned.\n**Trigger action:** `{entry.action.name}`",
+                color=discord.Color.dark_red()
+            )
+            alert.set_footer(text="/admire • security")
+            await channel.send(embed=alert)
 
     raw_reason = entry.reason if entry.reason else ""
     if entry.user.bot:
@@ -374,6 +640,212 @@ async def on_raw_reaction_remove(payload):
         member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
         role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
         if role and member: await member.remove_roles(role)
+
+# 9. SECURITY / ANTI-NUKE COMMANDS (administrator only)
+
+@bot.group(name="antinuke", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def antinuke_group(ctx):
+    status = "🟢 ON" if bot_data["antinuke"] else "🔴 OFF"
+    await ctx.send(f"🛡️ Anti-nuke is currently **{status}**.\nUsage: `!antinuke on` / `!antinuke off`")
+
+@antinuke_group.command(name="on")
+@commands.has_permissions(administrator=True)
+async def antinuke_on(ctx):
+    bot_data["antinuke"] = True
+    save_data()
+    await ctx.send("🛡️ Anti-nuke protection **enabled**.")
+
+@antinuke_group.command(name="off")
+@commands.has_permissions(administrator=True)
+async def antinuke_off(ctx):
+    bot_data["antinuke"] = False
+    save_data()
+    await ctx.send("🛡️ Anti-nuke protection **disabled**.")
+
+@bot.group(name="whitelist", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def whitelist_group(ctx):
+    await ctx.send("❌ Usage: `!whitelist add @user` / `!whitelist remove @user`")
+
+@whitelist_group.command(name="add")
+@commands.has_permissions(administrator=True)
+async def whitelist_add(ctx, member: discord.Member):
+    if member.id not in bot_data["whitelist"]:
+        bot_data["whitelist"].append(member.id)
+        save_data()
+    await ctx.send(f"✅ {member.mention} is now whitelisted from anti-nuke.")
+
+@whitelist_group.command(name="remove")
+@commands.has_permissions(administrator=True)
+async def whitelist_remove(ctx, member: discord.Member):
+    if member.id in bot_data["whitelist"]:
+        bot_data["whitelist"].remove(member.id)
+        save_data()
+    await ctx.send(f"🗑️ {member.mention} removed from the anti-nuke whitelist.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def nuke(ctx):
+    old_channel = ctx.channel
+    new_channel = await old_channel.clone(reason=f"Nuked by {ctx.author}")
+    await new_channel.edit(position=old_channel.position)
+    await old_channel.delete()
+    embed = discord.Embed(description="💣 This channel has been nuked.", color=discord.Color.dark_theme())
+    embed.set_footer(text="/admire • interface")
+    await new_channel.send(embed=embed)
+
+@bot.group(name="blacklist", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def blacklist_group(ctx):
+    await ctx.send("❌ Usage: `!blacklist add @user [reason]` / `!blacklist remove @user`")
+
+@blacklist_group.command(name="add")
+@commands.has_permissions(administrator=True)
+async def blacklist_add(ctx, user: discord.User, *, reason=None):
+    if user.id not in bot_data["blacklist"]:
+        bot_data["blacklist"].append(user.id)
+        save_data()
+    try:
+        await ctx.guild.ban(user, reason=f"Blacklisted: {reason or 'No reason provided'}")
+    except discord.Forbidden:
+        await ctx.send("⚠️ Added to blacklist, but I don't have permission to ban them.")
+        return
+    await ctx.send(f"⛔ {user.mention} (`{user.id}`) has been blacklisted and banned.")
+
+@blacklist_group.command(name="remove")
+@commands.has_permissions(administrator=True)
+async def blacklist_remove(ctx, user: discord.User):
+    if user.id in bot_data["blacklist"]:
+        bot_data["blacklist"].remove(user.id)
+        save_data()
+    try:
+        await ctx.guild.unban(user)
+    except discord.NotFound:
+        pass
+    await ctx.send(f"✅ {user.mention} (`{user.id}`) removed from blacklist and unbanned.")
+
+# Alias so `!removeblacklist @user` works the same as `!blacklist remove @user`
+@bot.command(name="removeblacklist")
+@commands.has_permissions(administrator=True)
+async def removeblacklist(ctx, user: discord.User):
+    await blacklist_remove(ctx, user)
+
+@bot.event
+async def on_member_join(member):
+    if member.id in bot_data["blacklist"]:
+        try:
+            await member.ban(reason="Blacklisted user attempted to rejoin.")
+        except discord.Forbidden:
+            pass
+
+# --- JAIL SYSTEM ---
+JAIL_ROLE_NAME = "Jailed"
+
+async def get_or_create_jail_role(guild):
+    role = discord.utils.get(guild.roles, name=JAIL_ROLE_NAME)
+    if role is None:
+        role = await guild.create_role(name=JAIL_ROLE_NAME, reason="Jail system role")
+        for ch in guild.channels:
+            try:
+                if isinstance(ch, discord.TextChannel):
+                    await ch.set_permissions(role, send_messages=False, add_reactions=False)
+                elif isinstance(ch, discord.VoiceChannel):
+                    await ch.set_permissions(role, connect=False)
+            except discord.Forbidden:
+                pass
+    return role
+
+@bot.event
+async def on_guild_channel_create(channel):
+    # Keeps the Jailed role locked out of any channel created after setup
+    role = discord.utils.get(channel.guild.roles, name=JAIL_ROLE_NAME)
+    if role:
+        try:
+            if isinstance(channel, discord.TextChannel):
+                await channel.set_permissions(role, send_messages=False, add_reactions=False)
+            elif isinstance(channel, discord.VoiceChannel):
+                await channel.set_permissions(role, connect=False)
+        except discord.Forbidden:
+            pass
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def jail(ctx, channel: discord.TextChannel):
+    bot_data["jail_channel"] = channel.id
+    save_data()
+    role = await get_or_create_jail_role(ctx.guild)
+    await channel.set_permissions(role, view_channel=True, send_messages=True)
+    await ctx.send(f"⚙️ Jail channel set to {channel.mention}.")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def jailuser(ctx, member: discord.Member, *, reason=None):
+    if bot_data["jail_channel"] is None:
+        await ctx.send("❌ No jail channel set yet. Use `!jail #channel` first.")
+        return
+    role = await get_or_create_jail_role(ctx.guild)
+    await member.add_roles(role, reason=reason)
+    if member.voice:
+        try:
+            await member.move_to(None)
+        except discord.Forbidden:
+            pass
+    jail_channel = ctx.guild.get_channel(bot_data["jail_channel"])
+    if jail_channel:
+        await jail_channel.send(f"🔒 {member.mention} has been jailed. Reason: {reason or 'No reason provided.'}")
+    embed = discord.Embed(description=f"🔒 {member.mention} has been jailed.", color=discord.Color.dark_theme())
+    embed.set_footer(text="/admire • security")
+    await ctx.send(embed=embed)
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def unjail(ctx, member: discord.Member):
+    role = discord.utils.get(ctx.guild.roles, name=JAIL_ROLE_NAME)
+    if role and role in member.roles:
+        await member.remove_roles(role)
+    embed = discord.Embed(description=f"🔓 {member.mention} has been unjailed.", color=discord.Color.dark_theme())
+    embed.set_footer(text="/admire • security")
+    await ctx.send(embed=embed)
+
+# --- PURGE / CS / SNIPE ---
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def purge(ctx, amount: int = 100):
+    amount = max(1, min(amount, 1000))  # safety cap; discord.py chunks this into <=100-message API calls
+    deleted = await ctx.channel.purge(limit=amount + 1)
+    msg = await ctx.send(f"🧹 Purged {len(deleted) - 1} messages.")
+    await msg.delete(delay=3)
+
+@bot.command(name="cs")
+@commands.has_permissions(manage_messages=True)
+async def cs_cmd(ctx, amount: int = 100):
+    amount = max(1, min(amount, 1000))
+    deleted = await ctx.channel.purge(limit=amount + 1)
+    msg = await ctx.send(f"🧹 Cleared {len(deleted) - 1} messages.")
+    await msg.delete(delay=3)
+
+@bot.event
+async def on_message_delete(message):
+    if message.author.bot:
+        return
+    deleted_messages[message.channel.id] = {
+        "content": message.content,
+        "author": message.author,
+        "time": discord.utils.utcnow()
+    }
+
+@bot.command()
+async def snipe(ctx):
+    data = deleted_messages.get(ctx.channel.id)
+    if not data:
+        await ctx.send("❌ Nothing to snipe here.")
+        return
+    embed = discord.Embed(description=data["content"] or "*[no text content]*", color=discord.Color.dark_theme())
+    embed.set_author(name=str(data["author"]), icon_url=data["author"].display_avatar.url)
+    embed.timestamp = data["time"]
+    embed.set_footer(text="/admire • interface")
+    await ctx.send(embed=embed)
 
 keep_alive()
 rules.add_rules_command(bot)
