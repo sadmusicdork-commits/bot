@@ -9,6 +9,7 @@ import asyncio
 import re
 import random
 import json
+from datetime import timedelta
 
 # --- RENDER AWAKE LOOP FIX ---
 app = Flask('')
@@ -96,7 +97,7 @@ DESTRUCTIVE_ACTIONS = {
 ANTINUKE_THRESHOLD = 3       # number of actions...
 ANTINUKE_WINDOW_SECONDS = 10 # ...within this many seconds triggers a response
 
-deleted_messages = {}  # channel_id -> {"content", "author", "time"} for !snipe
+deleted_messages = {}  # channel_id -> list of {"content", "author", "time"} for !snipe / !cs
 
 # Heartbeat loop that pings itself every 5 minutes to stay awake
 @tasks.loop(minutes=5)
@@ -113,7 +114,7 @@ async def on_ready():
     if not self_ping.is_running():
         self_ping.start()
 
-# 4. Command to send the clean reaction roles embed message
+# 4. Command to send the clean reaction roles embed message (KEEPS EMBED)
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_roles(ctx):
@@ -135,7 +136,7 @@ async def setup_roles(ctx):
     for emoji in EMOJI_TO_ROLE.keys():
         await msg.add_reaction(emoji)
 
-# 5. AUTOMATIC CHAT RESPONDER
+# 5. AUTOMATIC CHAT RESPONDER (KEEPS EMBED — pic perms)
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -232,11 +233,11 @@ class VoiceControlView(discord.ui.View):
             await channel.edit(user_limit=new_limit)
             await interaction.response.send_message(f"➖ User limit decreased to `{new_limit}`.", ephemeral=True)
 
-# 📜 VOICE PANEL TRIGGER COMMAND FOR ADMIN STAFF (EXACT MATCHING DESIGN LOOK)
+# 📜 VOICE PANEL TRIGGER COMMAND — BUTTON INTERFACE (KEEPS EMBED — this is your Image 1 panel)
+# Triggered by !voicepanel. Kept fully separate from the "!vc" text command group below.
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def voicepanel(ctx):
-    # Constructing description layout using your precise line breaks and dashes format
     panel_description = (
         "Use the buttons below to control your voice channel.\n\n"
         "**Button Usage**\n"
@@ -257,11 +258,17 @@ async def voicepanel(ctx):
         color=discord.Color.dark_theme()
     )
     embed.set_footer(text="/admire • interface")
-    
+
     view = VoiceControlView()
     await ctx.send(embed=embed, view=view)
 
-# 5b. !permit command — lets a specific member into your current voice channel
+# Alias so "!panel" also opens the button interface (matches Image 2's first line)
+@bot.command(name="panel")
+@commands.has_permissions(administrator=True)
+async def panel_alias(ctx):
+    await voicepanel(ctx)
+
+# 5b. !permit command — lets a specific member into your current voice channel (EMBED REMOVED)
 @bot.command()
 async def permit(ctx, member: discord.Member = None):
     if not ctx.author.voice or not ctx.author.voice.channel:
@@ -279,35 +286,26 @@ async def permit(ctx, member: discord.Member = None):
     overwrite.view_channel = True
     await channel.set_permissions(member, overwrite=overwrite)
 
-    embed = discord.Embed(
-        description=f"✅ {member.mention} has been permitted into {channel.mention}.",
-        color=discord.Color.dark_theme()
-    )
-    embed.set_footer(text="/admire • interface")
-    await ctx.send(embed=embed)
+    await ctx.send(f"✅ {member.mention} has been permitted into {channel.mention}.")
 
-# 5c. !vc command group — text-command versions of every voicepanel button
+# 5c. !vc command group — SEPARATE TEXT-COMMAND VERSION, plain text (no embeds)
+# This is intentionally independent from !voicepanel/!panel above.
 @bot.group(invoke_without_command=True)
 async def vc(ctx):
-    embed = discord.Embed(
-        description=(
-            "**!vc lock** — lock the voice channel\n"
-            "**!vc unlock** — unlock the voice channel\n"
-            "**!vc ghost** — hide the voice channel\n"
-            "**!vc reveal** — unhide the voice channel\n"
-            "**!vc claim** — claim the voice channel\n"
-            "**!vc disconnect @user** — disconnect a member\n"
-            "**!vc activity** — start an activity\n"
-            "**!vc info** — view channel information\n"
-            "**!vc increase** — increase the user limit\n"
-            "**!vc decrease** — decrease the user limit\n"
-            "**!vc permit @user** — let a user into the channel\n"
-            "**!vc reject @user** — revoke a user's access"
-        ),
-        color=discord.Color.dark_theme()
+    await ctx.send(
+        "**!vc lock** — lock the voice channel\n"
+        "**!vc unlock** — unlock the voice channel\n"
+        "**!vc ghost** — hide the voice channel\n"
+        "**!vc reveal** — unhide the voice channel\n"
+        "**!vc claim** — claim the voice channel\n"
+        "**!vc disconnect @user** — disconnect a member\n"
+        "**!vc activity** — start an activity\n"
+        "**!vc info** — view channel information\n"
+        "**!vc increase** — increase the user limit\n"
+        "**!vc decrease** — decrease the user limit\n"
+        "**!vc permit @user** — let a user into the channel\n"
+        "**!vc reject @user** — revoke a user's access"
     )
-    embed.set_footer(text="/admire • interface")
-    await ctx.send(embed=embed)
 
 async def _get_author_vc(ctx):
     if not ctx.author.voice or not ctx.author.voice.channel:
@@ -424,64 +422,57 @@ async def vc_reject(ctx, member: discord.Member = None):
     await channel.set_permissions(member, overwrite=None)
     await ctx.send(f"🚫 {member.mention}'s access to {channel.mention} has been revoked.")
 
-# 5d. GENERAL / COMMUNITY COMMANDS
+# 5d. GENERAL / COMMUNITY COMMANDS — ALL EMBEDS REMOVED, PLAIN TEXT
 
 @bot.command()
 async def ping(ctx):
     latency = round(bot.latency * 1000)
-    embed = discord.Embed(description=f"🏓 Pong! `{latency}ms`", color=discord.Color.dark_theme())
-    embed.set_footer(text="/admire • interface")
-    await ctx.send(embed=embed)
+    await ctx.send(f"🏓 Pong! `{latency}ms`")
 
 @bot.command()
 async def userinfo(ctx, member: discord.Member = None):
     member = member or ctx.author
-    embed = discord.Embed(title=f"User Info — {member}", color=discord.Color.dark_theme())
-    embed.set_thumbnail(url=member.display_avatar.url)
-    embed.add_field(name="ID", value=member.id)
-    embed.add_field(name="Joined Server", value=member.joined_at.strftime('%Y-%m-%d') if member.joined_at else "Unknown")
-    embed.add_field(name="Account Created", value=member.created_at.strftime('%Y-%m-%d'))
-    embed.add_field(name="Top Role", value=member.top_role.mention, inline=False)
-    embed.set_footer(text="/admire • interface")
-    await ctx.send(embed=embed)
+    joined = member.joined_at.strftime('%Y-%m-%d') if member.joined_at else "Unknown"
+    created = member.created_at.strftime('%Y-%m-%d')
+    await ctx.send(
+        f"**User Info — {member}**\n"
+        f"ID: `{member.id}`\n"
+        f"Joined Server: {joined}\n"
+        f"Account Created: {created}\n"
+        f"Top Role: {member.top_role.mention}"
+    )
 
 @bot.command()
 async def serverinfo(ctx):
     guild = ctx.guild
-    embed = discord.Embed(title=guild.name, color=discord.Color.dark_theme())
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-    embed.add_field(name="Members", value=guild.member_count)
-    embed.add_field(name="Owner", value=guild.owner.mention if guild.owner else "Unknown")
-    embed.add_field(name="Created", value=guild.created_at.strftime('%Y-%m-%d'))
-    embed.add_field(name="Roles", value=len(guild.roles))
-    embed.add_field(name="Channels", value=len(guild.channels))
-    embed.set_footer(text="/admire • interface")
-    await ctx.send(embed=embed)
+    owner = guild.owner.mention if guild.owner else "Unknown"
+    await ctx.send(
+        f"**{guild.name}**\n"
+        f"Members: {guild.member_count}\n"
+        f"Owner: {owner}\n"
+        f"Created: {guild.created_at.strftime('%Y-%m-%d')}\n"
+        f"Roles: {len(guild.roles)}\n"
+        f"Channels: {len(guild.channels)}"
+    )
 
 @bot.command()
 async def avatar(ctx, member: discord.Member = None):
     member = member or ctx.author
-    embed = discord.Embed(title=f"{member}'s Avatar", color=discord.Color.dark_theme())
-    embed.set_image(url=member.display_avatar.url)
-    embed.set_footer(text="/admire • interface")
-    await ctx.send(embed=embed)
+    await ctx.send(f"**{member}'s Avatar**\n{member.display_avatar.url}")
 
 @bot.command()
 async def roleinfo(ctx, *, role: discord.Role):
-    embed = discord.Embed(title=f"Role Info — {role.name}", color=role.color if role.color.value else discord.Color.dark_theme())
-    embed.add_field(name="ID", value=role.id)
-    embed.add_field(name="Members", value=len(role.members))
-    embed.add_field(name="Position", value=role.position)
-    embed.add_field(name="Mentionable", value=str(role.mentionable))
-    embed.set_footer(text="/admire • interface")
-    await ctx.send(embed=embed)
+    await ctx.send(
+        f"**Role Info — {role.name}**\n"
+        f"ID: `{role.id}`\n"
+        f"Members: {len(role.members)}\n"
+        f"Position: {role.position}\n"
+        f"Mentionable: {role.mentionable}"
+    )
 
 @bot.command()
 async def poll(ctx, *, question):
-    embed = discord.Embed(title="📊 Poll", description=question, color=discord.Color.dark_theme())
-    embed.set_footer(text=f"Poll started by {ctx.author}")
-    msg = await ctx.send(embed=embed)
+    msg = await ctx.send(f"📊 **Poll:** {question}\n*Started by {ctx.author}*")
     await msg.add_reaction("👍")
     await msg.add_reaction("👎")
 
@@ -522,7 +513,7 @@ async def ban(ctx, member: discord.Member, *, reason=None):
     await member.ban(reason=reason)
     await ctx.send(f"🔨 Banned {member.mention}. Reason: {reason or 'No reason provided.'}")
 
-# 6. AUTOMATIC STAFF LOG SYSTEM (HUMAN ATTRIBUTION DETECTOR RUNNING)
+# 6. AUTOMATIC STAFF LOG SYSTEM (unchanged — staff logs kept as embeds, not "general" commands)
 @bot.event
 async def on_audit_log_entry_create(entry):
     channel = bot.get_channel(LOG_CHANNEL_ID)
@@ -531,7 +522,6 @@ async def on_audit_log_entry_create(entry):
 
     if entry.user.id == bot.user.id or entry.user.id == SERVER_OWNER_ID: return
 
-    # 🛡️ ANTI-NUKE CHECK — runs before the regular logging below
     if bot_data["antinuke"] and entry.action in DESTRUCTIVE_ACTIONS and entry.user.id not in bot_data["whitelist"]:
         now = asyncio.get_event_loop().time()
         timestamps = [t for t in recent_actions.get(entry.user.id, []) if now - t < ANTINUKE_WINDOW_SECONDS]
@@ -564,19 +554,16 @@ async def on_audit_log_entry_create(entry):
     target = entry.target
     display_reason = raw_reason if raw_reason else "No reason provided."
 
-    # BAN LOGS
     if entry.action == discord.AuditLogAction.ban:
         embed = discord.Embed(title="🔨 Staff Log: Member Banned", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Banned:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}", color=discord.Color.dark_red())
         embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
-    # KICK LOGS
     elif entry.action == discord.AuditLogAction.kick:
         embed = discord.Embed(title="👢 Staff Log: Member Kicked", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Kicked:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}", color=discord.Color.red())
         embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
-    # TIMEOUT LOGS
     elif entry.action == discord.AuditLogAction.member_update:
         changes = entry.after
         if hasattr(changes, 'timed_out_until') and changes.timed_out_until is not None:
@@ -584,7 +571,6 @@ async def on_audit_log_entry_create(entry):
             embed.set_footer(text="/admire")
             await channel.send(embed=embed)
 
-    # ROLE LOGS
     elif entry.action == discord.AuditLogAction.member_role_update:
         if hasattr(entry.after, 'roles'):
             for role in entry.after.roles:
@@ -597,7 +583,6 @@ async def on_audit_log_entry_create(entry):
                 embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
 
-    # CHANNEL PERMISSION OVERWRITE LOGS
     elif entry.action in [discord.AuditLogAction.channel_overwrite_create, discord.AuditLogAction.channel_overwrite_update, discord.AuditLogAction.channel_overwrite_delete]:
         target_channel = entry.target
         if entry.action == discord.AuditLogAction.channel_overwrite_create:
@@ -641,7 +626,7 @@ async def on_raw_reaction_remove(payload):
         role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
         if role and member: await member.remove_roles(role)
 
-# 9. SECURITY / ANTI-NUKE COMMANDS (administrator only)
+# 9. SECURITY / ANTI-NUKE COMMANDS (administrator only) — EMBEDS REMOVED except jailuser/unjail alerts
 
 @bot.group(name="antinuke", invoke_without_command=True)
 @commands.has_permissions(administrator=True)
@@ -691,9 +676,7 @@ async def nuke(ctx):
     new_channel = await old_channel.clone(reason=f"Nuked by {ctx.author}")
     await new_channel.edit(position=old_channel.position)
     await old_channel.delete()
-    embed = discord.Embed(description="💣 This channel has been nuked.", color=discord.Color.dark_theme())
-    embed.set_footer(text="/admire • interface")
-    await new_channel.send(embed=embed)
+    await new_channel.send("💣 This channel has been nuked.")
 
 @bot.group(name="blacklist", invoke_without_command=True)
 @commands.has_permissions(administrator=True)
@@ -725,7 +708,6 @@ async def blacklist_remove(ctx, user: discord.User):
         pass
     await ctx.send(f"✅ {user.mention} (`{user.id}`) removed from blacklist and unbanned.")
 
-# Alias so `!removeblacklist @user` works the same as `!blacklist remove @user`
 @bot.command(name="removeblacklist")
 @commands.has_permissions(administrator=True)
 async def removeblacklist(ctx, user: discord.User):
@@ -758,7 +740,6 @@ async def get_or_create_jail_role(guild):
 
 @bot.event
 async def on_guild_channel_create(channel):
-    # Keeps the Jailed role locked out of any channel created after setup
     role = discord.utils.get(channel.guild.roles, name=JAIL_ROLE_NAME)
     if role:
         try:
@@ -794,9 +775,7 @@ async def jailuser(ctx, member: discord.Member, *, reason=None):
     jail_channel = ctx.guild.get_channel(bot_data["jail_channel"])
     if jail_channel:
         await jail_channel.send(f"🔒 {member.mention} has been jailed. Reason: {reason or 'No reason provided.'}")
-    embed = discord.Embed(description=f"🔒 {member.mention} has been jailed.", color=discord.Color.dark_theme())
-    embed.set_footer(text="/admire • security")
-    await ctx.send(embed=embed)
+    await ctx.send(f"🔒 {member.mention} has been jailed.")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -804,9 +783,7 @@ async def unjail(ctx, member: discord.Member):
     role = discord.utils.get(ctx.guild.roles, name=JAIL_ROLE_NAME)
     if role and role in member.roles:
         await member.remove_roles(role)
-    embed = discord.Embed(description=f"🔓 {member.mention} has been unjailed.", color=discord.Color.dark_theme())
-    embed.set_footer(text="/admire • security")
-    await ctx.send(embed=embed)
+    await ctx.send(f"🔓 {member.mention} has been unjailed.")
 
 # --- PURGE / CS / SNIPE ---
 @bot.command()
@@ -818,34 +795,42 @@ async def purge(ctx, amount: int = 100):
     await msg.delete(delay=3)
 
 @bot.command(name="cs")
-@commands.has_permissions(manage_messages=True)
-async def cs_cmd(ctx, amount: int = 100):
-    amount = max(1, min(amount, 1000))
-    deleted = await ctx.channel.purge(limit=amount + 1)
-    msg = await ctx.send(f"🧹 Cleared {len(deleted) - 1} messages.")
-    await msg.delete(delay=3)
+async def cs_cmd(ctx):
+    cutoff = discord.utils.utcnow() - timedelta(minutes=5)
+    entries = [e for e in deleted_messages.get(ctx.channel.id, []) if e["time"] >= cutoff]
+    if not entries:
+        await ctx.send("❌ No messages deleted in this channel in the last 5 minutes.")
+        return
+
+    lines = ["🗑️ **Recently Deleted Messages**"]
+    for e in entries[-10:]:  # cap at 10
+        ts = discord.utils.format_dt(e["time"], style="T")
+        content = e["content"] or "*[no text content]*"
+        lines.append(f"**{e['author']}** • {ts}\n{content}")
+    await ctx.send("\n\n".join(lines))
 
 @bot.event
 async def on_message_delete(message):
     if message.author.bot:
         return
-    deleted_messages[message.channel.id] = {
+    entry = {
         "content": message.content,
         "author": message.author,
         "time": discord.utils.utcnow()
     }
+    deleted_messages.setdefault(message.channel.id, []).append(entry)
+    cutoff = discord.utils.utcnow() - timedelta(minutes=5)
+    deleted_messages[message.channel.id] = [e for e in deleted_messages[message.channel.id] if e["time"] >= cutoff]
 
 @bot.command()
 async def snipe(ctx):
-    data = deleted_messages.get(ctx.channel.id)
-    if not data:
+    entries = deleted_messages.get(ctx.channel.id)
+    if not entries:
         await ctx.send("❌ Nothing to snipe here.")
         return
-    embed = discord.Embed(description=data["content"] or "*[no text content]*", color=discord.Color.dark_theme())
-    embed.set_author(name=str(data["author"]), icon_url=data["author"].display_avatar.url)
-    embed.timestamp = data["time"]
-    embed.set_footer(text="/admire • interface")
-    await ctx.send(embed=embed)
+    data = entries[-1]
+    content = data["content"] or "*[no text content]*"
+    await ctx.send(f"**{data['author']}:** {content}")
 
 keep_alive()
 rules.add_rules_command(bot)
