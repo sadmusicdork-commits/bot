@@ -254,15 +254,19 @@ async def permit(ctx, member: discord.Member = None):
     embed.set_footer(text="/admire • interface")
     await ctx.send(embed=embed)
 
-# 5c. !unpermit command — revokes access previously granted with !permit
-@bot.command()
-async def unpermit(ctx, member: discord.Member = None):
+# 5c. !vc reject — revokes access previously granted with !permit
+@bot.group(invoke_without_command=True)
+async def vc(ctx):
+    await ctx.send("❌ Usage: `!vc reject @user`")
+
+@vc.command(name="reject")
+async def vc_reject(ctx, member: discord.Member = None):
     if not ctx.author.voice or not ctx.author.voice.channel:
         await ctx.send("❌ You need to be in a voice channel to use this.")
         return
 
     if member is None:
-        await ctx.send("❌ Usage: `!unpermit @user`")
+        await ctx.send("❌ Usage: `!vc reject @user`")
         return
 
     channel = ctx.author.voice.channel
