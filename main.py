@@ -203,12 +203,26 @@ class VoiceControlView(discord.ui.View):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def voicepanel(ctx):
+    # Constructing description layout using your precise line breaks and dashes format
+    panel_description = (
+        "Use the buttons below to control your voice channel.\n\n"
+        "**Button Usage**\n"
+        f"{VC_EMOJI_LOCK} — **Lock** the voice channel\n"
+        f"{VC_EMOJI_UNLOCK} — **Unlock** the voice channel\n"
+        f"{VC_EMOJI_GHOST} — **Ghost** the voice channel\n"
+        f"{VC_EMOJI_REVEAL} — **Reveal** the voice channel\n"
+        f"{VC_EMOJI_CLAIM} — **Claim** the voice channel\n"
+        f"{VC_EMOJI_DISCONNECT} — **Disconnect** a member\n"
+        f"{VC_EMOJI_ACTIVITY} — **Start** an activity\n"
+        f"{VC_EMOJI_INFO} — **View** channel information\n"
+        f"{VC_EMOJI_PLUS} — **Increase** the user limit\n"
+        f"{VC_EMOJI_MINUS} — **Decrease** the user limit"
+    )
+
     embed = discord.Embed(
-        title="Voice Control Center",
-        description="Use the interactive button controls below to manage your custom voice channel options instantly.",
+        description=panel_description,
         color=discord.Color.dark_theme()
     )
-    embed.add_field(name="Button Operations", value="• **Lock / Unlock:** Toggle connection access\n• **Ghost / Reveal:** Toggle channel visibility rules\n• **Increase / Decrease:** Modify channel user slots limit", inline=False)
     embed.set_footer(text="/admire • interface")
     
     view = VoiceControlView()
