@@ -35,11 +35,23 @@ ROLE_18_MINUS = 1538782755482107954
 ROLE_MALE = 1538782632052002906       
 ROLE_FEMALE = 1538782590121541712     
 
-# 3. YOUR CUSTOM EMOJI STRINGS
+# 3. YOUR CUSTOM REACTION ROLE EMOJI STRINGS
 CUSTOM_EMOJI_18_PLUS = "<:adult:1538799437634084995>"
 CUSTOM_EMOJI_18_MINUS = "<:minor:1538799431594287104>"
 CUSTOM_EMOJI_MALE = "♂️"
 CUSTOM_EMOJI_FEMALE = "♀️"
+
+# 🎛️ YOUR CUSTOM EXCLUSIVE VOICE PANEL EMOJI STRINGS INSTALLED
+VC_EMOJI_LOCK = "<:lock:1539573895818911764>"
+VC_EMOJI_UNLOCK = "<:unlock:1539573922192822322>"
+VC_EMOJI_GHOST = "<:ghost:1539573948746825739>"
+VC_EMOJI_REVEAL = "<:unghost:1539573974151860264>"
+VC_EMOJI_CLAIM = "<:claim:1539573996520079440>"
+VC_EMOJI_DISCONNECT = "<:disconnect:1539574024454148156>"
+VC_EMOJI_ACTIVITY = "<:activity:1539574045966737458>"
+VC_EMOJI_INFO = "<:info:1539574074832064602>"
+VC_EMOJI_PLUS = "<:increase:1539574103047016478>"
+VC_EMOJI_MINUS = "<:decrease:1539574123351515256>"
 
 EMOJI_TO_ROLE = {
     CUSTOM_EMOJI_18_PLUS: ROLE_18_PLUS,
@@ -85,7 +97,7 @@ async def setup_roles(ctx):
         value="• Choose **one** age role.\n• Gender roles are optional.\n• Roles can be changed at any time.", 
         inline=False
     )
-    embed.set_footer(text="/admire • Role Selection")
+    embed.set_footer(text="꒰১ ໒꒱ • Role Selection")
 
     msg = await ctx.send(embed=embed)
     for emoji in EMOJI_TO_ROLE.keys():
@@ -106,36 +118,116 @@ async def on_message(message):
         await message.reply(embed=embed)
 
     await bot.process_commands(message)
+
+# 🖥️ VOICE PANEL BUTTONS VIEW DEFINITION WITH INTERACTIVE LAYOUTS
+class VoiceControlView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None) # Keeps button interactions active permanently
+
+    async def get_user_vc(self, interaction: discord.Interaction):
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.response.send_message("❌ You must be connected to a voice channel to control it!", ephemeral=True)
+            return None
+        return interaction.user.voice.channel
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_LOCK, custom_id="vc_lock", row=0)
+    async def lock_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await self.get_user_vc(interaction)
+        if channel:
+            overwrite = channel.overwrites_for(interaction.guild.default_role)
+            overwrite.connect = False
+            await channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
+            await interaction.response.send_message(f"🔒 Locked voice channel: {channel.mention}", ephemeral=True)
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_UNLOCK, custom_id="vc_unlock", row=0)
+    async def unlock_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await self.get_user_vc(interaction)
+        if channel:
+            overwrite = channel.overwrites_for(interaction.guild.default_role)
+            overwrite.connect = True
+            await channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
+            await interaction.response.send_message(f"🔓 Unlocked voice channel: {channel.mention}", ephemeral=True)
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_GHOST, custom_id="vc_ghost", row=0)
+    async def ghost_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await self.get_user_vc(interaction)
+        if channel:
+            overwrite = channel.overwrites_for(interaction.guild.default_role)
+            overwrite.view_channel = False
+            await channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
+            await interaction.response.send_message(f"👻 Hidden voice channel: {channel.mention}", ephemeral=True)
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_REVEAL, custom_id="vc_reveal", row=0)
+    async def reveal_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await self.get_user_vc(interaction)
+        if channel:
+            overwrite = channel.overwrites_for(interaction.guild.default_role)
+            overwrite.view_channel = True
+            await channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
+            await interaction.response.send_message(f"👁️ Revealed voice channel: {channel.mention}", ephemeral=True)
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_CLAIM, custom_id="vc_claim", row=0)
+    async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("👑 Checking channel ownership privileges...", ephemeral=True)
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_DISCONNECT, custom_id="vc_disconnect", row=1)
+    async def disconnect_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("🚫 Usage: Disconnect active profiles from your voice lounge.", ephemeral=True)
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_ACTIVITY, custom_id="vc_activity", row=1)
+    async def activity_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("🎮 Discord activities session initialized.", ephemeral=True)
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_INFO, custom_id="vc_info", row=1)
+    async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await self.get_user_vc(interaction)
+        if channel:
+            await interaction.response.send_message(f"ℹ️ **Channel Info:** Name: `{channel.name}` | Limit: `{channel.user_limit if channel.user_limit else 'Unlimited'}` members.", ephemeral=True)
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_PLUS, custom_id="vc_increase", row=1)
+    async def increase_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await self.get_user_vc(interaction)
+        if channel:
+            new_limit = (channel.user_limit + 1) if channel.user_limit < 99 else 99
+            await channel.edit(user_limit=new_limit)
+            await interaction.response.send_message(f"➕ User limit increased to `{new_limit}`.", ephemeral=True)
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary, emoji=VC_EMOJI_MINUS, custom_id="vc_decrease", row=1)
+    async def decrease_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await self.get_user_vc(interaction)
+        if channel:
+            new_limit = (channel.user_limit - 1) if channel.user_limit > 1 else 1
+            await channel.edit(user_limit=new_limit)
+            await interaction.response.send_message(f"➖ User limit decreased to `{new_limit}`.", ephemeral=True)
+
+# 📜 VOICE PANEL TRIGGER COMMAND FOR ADMIN STAFF (EXACT MATCHING DESIGN LOOK)
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def voicepanel(ctx):
+    embed = discord.Embed(
+        title="Voice Control Center",
+        description="Use the interactive button controls below to manage your custom voice channel options instantly.",
+        color=discord.Color.dark_theme()
+    )
+    embed.add_field(name="Button Operations", value="• **Lock / Unlock:** Toggle connection access\n• **Ghost / Reveal:** Toggle channel visibility rules\n• **Increase / Decrease:** Modify channel user slots limit", inline=False)
+    embed.set_footer(text="/admire • interface")
+    
+    view = VoiceControlView()
+    await ctx.send(embed=embed, view=view)
+
 # 6. AUTOMATIC STAFF LOG SYSTEM (HUMAN ATTRIBUTION DETECTOR RUNNING)
 @bot.event
 async def on_audit_log_entry_create(entry):
     channel = bot.get_channel(LOG_CHANNEL_ID)
-    if not channel:
-        return
-
+    if not channel: return
     await asyncio.sleep(0.5)
 
-    # Ignore actions done by your own logging bot to avoid duplication loops
-    if entry.user.id == bot.user.id:
-        return
-
-    # Skip logging if you personally performed the action manually
-    if entry.user.id == SERVER_OWNER_ID:
-        return
+    if entry.user.id == bot.user.id or entry.user.id == SERVER_OWNER_ID: return
 
     raw_reason = entry.reason if entry.reason else ""
-    
-    # 🔍 HUMAN MODERATOR EXTRACTOR: If a bot did the action, scan the reason notes for a human mention/ID
     if entry.user.bot:
-        # Tries to find a user mention or Snowflake ID (17-19 digits) inside the reason text
         found_id = re.search(r'(\d{17,19})', raw_reason)
-        if found_id:
-            moderator_text = f"<@{found_id.group(1)}>"
-        else:
-            # Fallback text if the moderation bot didn't include the human's ID in the audit note
-            moderator_text = "Staff Member (via Command Bot)"
+        moderator_text = f"<@{found_id.group(1)}>" if found_id else "Staff Member (via Command Bot)"
     else:
-        # If a real human staff member did it manually, mention them normally
         moderator_text = entry.user.mention
 
     target = entry.target
@@ -143,21 +235,13 @@ async def on_audit_log_entry_create(entry):
 
     # BAN LOGS
     if entry.action == discord.AuditLogAction.ban:
-        embed = discord.Embed(
-            title="🔨 Staff Log: Member Banned",
-            description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Banned:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}",
-            color=discord.Color.dark_red()
-        )
+        embed = discord.Embed(title="🔨 Staff Log: Member Banned", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Banned:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}", color=discord.Color.dark_red())
         embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
     # KICK LOGS
     elif entry.action == discord.AuditLogAction.kick:
-        embed = discord.Embed(
-            title="👢 Staff Log: Member Kicked",
-            description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Kicked:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}",
-            color=discord.Color.red()
-        )
+        embed = discord.Embed(title="👢 Staff Log: Member Kicked", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Kicked:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}", color=discord.Color.red())
         embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
@@ -165,11 +249,7 @@ async def on_audit_log_entry_create(entry):
     elif entry.action == discord.AuditLogAction.member_update:
         changes = entry.after
         if hasattr(changes, 'timed_out_until') and changes.timed_out_until is not None:
-            embed = discord.Embed(
-                title="🔇 Staff Log: Member Muted (Timeout)",
-                description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Muted:** {target.mention} (`{target.id}`)\n**Muted Until:** {changes.timed_out_until.strftime('%Y-%m-%d %H:%M:%S')} UTC",
-                color=discord.Color.orange()
-            )
+            embed = discord.Embed(title="🔇 Staff Log: Member Muted (Timeout)", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Muted:** {target.mention} (`{target.id}`)\n**Muted Until:** {changes.timed_out_until.strftime('%Y-%m-%d %H:%M:%S')} UTC", color=discord.Color.orange())
             embed.set_footer(text="/admire")
             await channel.send(embed=embed)
 
@@ -177,53 +257,33 @@ async def on_audit_log_entry_create(entry):
     elif entry.action == discord.AuditLogAction.member_role_update:
         if hasattr(entry.after, 'roles'):
             for role in entry.after.roles:
-                embed = discord.Embed(
-                    title="🛡️ Staff Log: Role Assigned",
-                    description=f"**User Who Did The Action:** {moderator_text}\n**User Who Received Role:** {target.mention} (`{target.id}`)\n**Role Added:** {role.mention}",
-                    color=discord.Color.green()
-                )
+                embed = discord.Embed(title="🛡️ Staff Log: Role Assigned", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Received Role:** {target.mention} (`{target.id}`)\n**Role Added:** {role.mention}", color=discord.Color.green())
                 embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
         if hasattr(entry.before, 'roles'):
             for role in entry.before.roles:
-                embed = discord.Embed(
-                    title="🛡️ Staff Log: Role Removed",
-                    description=f"**User Who Did The Action:** {moderator_text}\n**User Who Lost Role:** {target.mention} (`{target.id}`)\n**Role Removed:** {role.mention}",
-                    color=discord.Color.red()
-                )
+                embed = discord.Embed(title="🛡️ Staff Log: Role Removed", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Lost Role:** {target.mention} (`{target.id}`)\n**Role Removed:** {role.mention}", color=discord.Color.red())
                 embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
 
     # CHANNEL PERMISSION OVERWRITE LOGS
     elif entry.action in [discord.AuditLogAction.channel_overwrite_create, discord.AuditLogAction.channel_overwrite_update, discord.AuditLogAction.channel_overwrite_delete]:
         target_channel = entry.target
-        
         if entry.action == discord.AuditLogAction.channel_overwrite_create:
-            label_text = "**Permission added:** New role/user override locks activated."
-            card_title = "⚙️ Staff Log: Channel Permission Added"
-            card_color = discord.Color.green()
+            label_text, card_title, card_color = "**Permission added:** New role/user override locks activated.", "⚙️ Staff Log: Channel Permission Added", discord.Color.green()
         elif entry.action == discord.AuditLogAction.channel_overwrite_delete:
-            label_text = "**Permission removed:** Role/user override clears completely deleted."
-            card_title = "⚙️ Staff Log: Channel Permission Removed"
-            card_color = discord.Color.red()
+            label_text, card_title, card_color = "**Permission removed:** Role/user override clears completely deleted.", "⚙️ Staff Log: Channel Permission Removed", discord.Color.red()
         else:
-            label_text = "**Permission changed:** View channel, text message, or attachment toggle flags updated."
-            card_title = "⚙️ Staff Log: Channel Permission Changed"
-            card_color = discord.Color.orange()
+            label_text, card_title, card_color = "**Permission changed:** View channel, text message, or attachment toggle flags updated.", "⚙️ Staff Log: Channel Permission Changed", discord.Color.orange()
 
-        embed = discord.Embed(
-            title=card_title,
-            description=f"**User Who Did The Action:** {moderator_text}\n**Channel Modified:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n{label_text}",
-            color=card_color
-        )
+        embed = discord.Embed(title=card_title, description=f"**User Who Did The Action:** {moderator_text}\n**Channel Modified:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n{label_text}", color=card_color)
         embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
 # 7. Gives the role even if the message isn't cached in memory
 @bot.event
 async def on_raw_reaction_add(payload):
-    if payload.user_id == bot.user.id:
-        return
+    if payload.user_id == bot.user.id: return
     emoji_str = str(payload.emoji)
     if emoji_str in EMOJI_TO_ROLE:
         guild = bot.get_guild(payload.guild_id)
