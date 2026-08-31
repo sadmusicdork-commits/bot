@@ -113,8 +113,13 @@ async def on_ready():
     print(f"Logged in as {bot.user.name}! Your bot is online and ready.")
     if not self_ping.is_running():
         self_ping.start()
+    # Re-registers the voicepanel buttons as a persistent view so they keep
+    # working on old panel messages after every bot restart/redeploy.
+    if not getattr(bot, "_persistent_views_added", False):
+        bot.add_view(VoiceControlView())
+        bot._persistent_views_added = True
 
-# 4. Command to send the clean reaction roles embed message (KEEPS EMBED)
+# 4. Command to send the clean reaction roles embed message
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setup_roles(ctx):
@@ -136,7 +141,7 @@ async def setup_roles(ctx):
     for emoji in EMOJI_TO_ROLE.keys():
         await msg.add_reaction(emoji)
 
-# 5. AUTOMATIC CHAT RESPONDER (KEEPS EMBED — pic perms)
+# 5. AUTOMATIC CHAT RESPONDER
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -144,7 +149,7 @@ async def on_message(message):
 
     if "pic perms" in message.content.lower():
         embed = discord.Embed(
-            description="rep **/admire** in status or **boost** for pic perms",
+            description="**boost** for pic perms",
             color=discord.Color.dark_theme()
         )
         embed.set_footer(text="꒰১ ໒꒱ • Media Access")
@@ -233,7 +238,7 @@ class VoiceControlView(discord.ui.View):
             await channel.edit(user_limit=new_limit)
             await interaction.response.send_message(f"➖ User limit decreased to `{new_limit}`.", ephemeral=True)
 
-# 📜 VOICE PANEL TRIGGER COMMAND — BUTTON INTERFACE (KEEPS EMBED — this is your Image 1 panel)
+# 📜 VOICE PANEL TRIGGER COMMAND — BUTTON INTERFACE
 # Triggered by !voicepanel. Kept fully separate from the "!vc" text command group below.
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -257,18 +262,17 @@ async def voicepanel(ctx):
         description=panel_description,
         color=discord.Color.dark_theme()
     )
-    embed.set_footer(text="/admire • interface")
 
     view = VoiceControlView()
     await ctx.send(embed=embed, view=view)
 
-# Alias so "!panel" also opens the button interface (matches Image 2's first line)
+# Alias so "!panel" also opens the button interface
 @bot.command(name="panel")
 @commands.has_permissions(administrator=True)
 async def panel_alias(ctx):
     await voicepanel(ctx)
 
-# 5b. !permit command — lets a specific member into your current voice channel (EMBED REMOVED)
+# 5b. !permit command — lets a specific member into your current voice channel
 @bot.command()
 async def permit(ctx, member: discord.Member = None):
     if not ctx.author.voice or not ctx.author.voice.channel:
@@ -288,24 +292,11 @@ async def permit(ctx, member: discord.Member = None):
 
     await ctx.send(f"✅ {member.mention} has been permitted into {channel.mention}.")
 
-# 5c. !vc command group — SEPARATE TEXT-COMMAND VERSION, plain text (no embeds)
+# 5c. !vc command group — separate text-command version, plain text (no embeds)
 # This is intentionally independent from !voicepanel/!panel above.
 @bot.group(invoke_without_command=True)
 async def vc(ctx):
-    await ctx.send(
-        "**!vc lock** — lock the voice channel\n"
-        "**!vc unlock** — unlock the voice channel\n"
-        "**!vc ghost** — hide the voice channel\n"
-        "**!vc reveal** — unhide the voice channel\n"
-        "**!vc claim** — claim the voice channel\n"
-        "**!vc disconnect @user** — disconnect a member\n"
-        "**!vc activity** — start an activity\n"
-        "**!vc info** — view channel information\n"
-        "**!vc increase** — increase the user limit\n"
-        "**!vc decrease** — decrease the user limit\n"
-        "**!vc permit @user** — let a user into the channel\n"
-        "**!vc reject @user** — revoke a user's access"
-    )
+    await ctx.send("Usage: `!vc <lock|unlock|ghost|reveal|claim|disconnect|activity|info|increase|decrease|permit|reject>`")
 
 async def _get_author_vc(ctx):
     if not ctx.author.voice or not ctx.author.voice.channel:
@@ -422,7 +413,7 @@ async def vc_reject(ctx, member: discord.Member = None):
     await channel.set_permissions(member, overwrite=None)
     await ctx.send(f"🚫 {member.mention}'s access to {channel.mention} has been revoked.")
 
-# 5d. GENERAL / COMMUNITY COMMANDS — ALL EMBEDS REMOVED, PLAIN TEXT
+# 5d. GENERAL / COMMUNITY COMMANDS
 
 @bot.command()
 async def ping(ctx):
@@ -513,7 +504,7 @@ async def ban(ctx, member: discord.Member, *, reason=None):
     await member.ban(reason=reason)
     await ctx.send(f"🔨 Banned {member.mention}. Reason: {reason or 'No reason provided.'}")
 
-# 6. AUTOMATIC STAFF LOG SYSTEM (unchanged — staff logs kept as embeds, not "general" commands)
+# 6. AUTOMATIC STAFF LOG SYSTEM
 @bot.event
 async def on_audit_log_entry_create(entry):
     channel = bot.get_channel(LOG_CHANNEL_ID)
@@ -541,7 +532,6 @@ async def on_audit_log_entry_create(entry):
                 description=f"{entry.user.mention} (`{entry.user.id}`) tripped anti-nuke protection and was banned.\n**Trigger action:** `{entry.action.name}`",
                 color=discord.Color.dark_red()
             )
-            alert.set_footer(text="/admire • security")
             await channel.send(embed=alert)
 
     raw_reason = entry.reason if entry.reason else ""
@@ -556,31 +546,26 @@ async def on_audit_log_entry_create(entry):
 
     if entry.action == discord.AuditLogAction.ban:
         embed = discord.Embed(title="🔨 Staff Log: Member Banned", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Banned:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}", color=discord.Color.dark_red())
-        embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
     elif entry.action == discord.AuditLogAction.kick:
         embed = discord.Embed(title="👢 Staff Log: Member Kicked", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Kicked:** {target.mention} (`{target.id}`)\n**Reason:** {display_reason}", color=discord.Color.red())
-        embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
     elif entry.action == discord.AuditLogAction.member_update:
         changes = entry.after
         if hasattr(changes, 'timed_out_until') and changes.timed_out_until is not None:
             embed = discord.Embed(title="🔇 Staff Log: Member Muted (Timeout)", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Was Muted:** {target.mention} (`{target.id}`)\n**Muted Until:** {changes.timed_out_until.strftime('%Y-%m-%d %H:%M:%S')} UTC", color=discord.Color.orange())
-            embed.set_footer(text="/admire")
             await channel.send(embed=embed)
 
     elif entry.action == discord.AuditLogAction.member_role_update:
         if hasattr(entry.after, 'roles'):
             for role in entry.after.roles:
                 embed = discord.Embed(title="🛡️ Staff Log: Role Assigned", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Received Role:** {target.mention} (`{target.id}`)\n**Role Added:** {role.mention}", color=discord.Color.green())
-                embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
         if hasattr(entry.before, 'roles'):
             for role in entry.before.roles:
                 embed = discord.Embed(title="🛡️ Staff Log: Role Removed", description=f"**User Who Did The Action:** {moderator_text}\n**User Who Lost Role:** {target.mention} (`{target.id}`)\n**Role Removed:** {role.mention}", color=discord.Color.red())
-                embed.set_footer(text="/admire")
                 await channel.send(embed=embed)
 
     elif entry.action in [discord.AuditLogAction.channel_overwrite_create, discord.AuditLogAction.channel_overwrite_update, discord.AuditLogAction.channel_overwrite_delete]:
@@ -593,7 +578,6 @@ async def on_audit_log_entry_create(entry):
             label_text, card_title, card_color = "**Permission changed:** View channel, text message, or attachment toggle flags updated.", "⚙️ Staff Log: Channel Permission Changed", discord.Color.orange()
 
         embed = discord.Embed(title=card_title, description=f"**User Who Did The Action:** {moderator_text}\n**Channel Modified:** {target_channel.mention if hasattr(target_channel, 'mention') else target_channel}\n{label_text}", color=card_color)
-        embed.set_footer(text="/admire")
         await channel.send(embed=embed)
 
 # 7. Gives the role even if the message isn't cached in memory
@@ -626,7 +610,7 @@ async def on_raw_reaction_remove(payload):
         role = guild.get_role(EMOJI_TO_ROLE[emoji_str])
         if role and member: await member.remove_roles(role)
 
-# 9. SECURITY / ANTI-NUKE COMMANDS (administrator only) — EMBEDS REMOVED except jailuser/unjail alerts
+# 9. SECURITY / ANTI-NUKE COMMANDS (administrator only)
 
 @bot.group(name="antinuke", invoke_without_command=True)
 @commands.has_permissions(administrator=True)
