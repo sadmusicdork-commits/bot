@@ -11,5 +11,5 @@ def add_rules_command(bot):
             description="follow tos\nuse common sense\nno nsfw/gore\nno racial slurs\nno advertisement",
             color=discord.Color.dark_theme()
         )
-        embed.set_footer(text="/admire • Server Rules")
+        embed.set_footer(text="/fantasies • Server Rules")
         await ctx.send(embed=embed)
