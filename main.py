@@ -147,14 +147,6 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    if "pic perms" in message.content.lower():
-        embed = discord.Embed(
-            description="**boost** for pic perms",
-            color=discord.Color.dark_theme()
-        )
-        embed.set_footer(text="꒰১ ໒꒱ • Media Access")
-        await message.reply(embed=embed)
-
     await bot.process_commands(message)
 
 # 🖥️ VOICE PANEL BUTTONS VIEW DEFINITION WITH INTERACTIVE LAYOUTS
