@@ -413,7 +413,7 @@ async def fgperks(ctx):
     embed = discord.Embed(
         description=(
             "**fg perks :**\n\n"
-            "custom fg role ; & custom vc\n\n"
+            "custom fg role ; & custom vc ; timeout / vc perms\n\n"
             "can get excluded from gw requirements\n\n"
             f"fg must be active to receive these perks ; make a [ticket]({ticket_link}) for help."
         ),
