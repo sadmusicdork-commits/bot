@@ -407,6 +407,20 @@ async def vc_reject(ctx, member: discord.Member = None):
 
 # 5d. GENERAL / COMMUNITY COMMANDS
 
+@bot.command(name="fgperks")
+async def fgperks(ctx):
+    ticket_link = "https://discord.com/channels/1538228254169763861/1546368225183404042"
+    embed = discord.Embed(
+        description=(
+            "**fg perks :**\n\n"
+            "custom fg role ; & custom vc\n\n"
+            "can get excluded from gw requirements\n\n"
+            f"fg must be active to receive these perks ; make a [ticket]({ticket_link}) for help."
+        ),
+        color=discord.Color.dark_theme()
+    )
+    await ctx.send(embed=embed)
+
 @bot.command()
 async def ping(ctx):
     latency = round(bot.latency * 1000)
